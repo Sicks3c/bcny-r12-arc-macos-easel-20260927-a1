@@ -119,6 +119,25 @@ swiftc "$GITHUB_WORKSPACE/ax-view-easels-once.swift" -o "$RAW/ax-view-easels-onc
 swiftc "$GITHUB_WORKSPACE/ax-create-blank-easel-once.swift" -o "$RAW/ax-create-blank-easel-once"
 swiftc "$GITHUB_WORKSPACE/ax-easel-route-hash.swift" -o "$RAW/ax-easel-route-hash"
 swiftc "$GITHUB_WORKSPACE/ax-easel-item-capability.swift" -o "$RAW/ax-easel-item-capability"
+if [[ "${COV_STAGE:-}" == easel-item-diagnostic ]]; then
+  FORBIDDEN_SOURCE_API_HITS="$({ LC_ALL=C grep -Ec 'AXUIElementPerformAction|AXUIElementSetAttributeValue|AXUIElementCopyElementAtPosition|AXUIElementCopyParameterizedAttributeValue|CGEvent(Post|Create|Source|Tap)|postToPid|\.post\(tap:|CGWindowListCreateImage|screencapture|NSPasteboard' "$GITHUB_WORKSPACE/ax-easel-item-diagnostic.swift" || true; })"
+  KAXVALUE_ATTRIBUTE_COPY_HITS="$({ LC_ALL=C grep -Ec 'copyAttribute\([^,]+,[[:space:]]*kAXValueAttribute' "$GITHUB_WORKSPACE/ax-easel-item-diagnostic.swift" || true; })"
+  FORBIDDEN_CONTENT_ATTRIBUTE_HITS="$({ LC_ALL=C grep -Ec 'kAXDescriptionAttribute|kAXHelpAttribute|kAXURLAttribute|kAXDocumentAttribute|kAXFilenameAttribute' "$GITHUB_WORKSPACE/ax-easel-item-diagnostic.swift" || true; })"
+  FORBIDDEN_ITEM_LITERAL_HITS="$({ LC_ALL=C grep -Eic 'arc\.net/e/|Untitled Easel|Easel Canvas View' "$GITHUB_WORKSPACE/ax-easel-item-diagnostic.swift" || true; })"
+  {
+    echo "forbidden_source_api_hits=$FORBIDDEN_SOURCE_API_HITS"
+    echo "kaxvalue_attribute_copy_hits=$KAXVALUE_ATTRIBUTE_COPY_HITS"
+    echo "forbidden_content_attribute_hits=$FORBIDDEN_CONTENT_ATTRIBUTE_HITS"
+    echo "forbidden_item_literal_hits=$FORBIDDEN_ITEM_LITERAL_HITS"
+    if [[ "$FORBIDDEN_SOURCE_API_HITS" == 0 && "$KAXVALUE_ATTRIBUTE_COPY_HITS" == 0 && "$FORBIDDEN_CONTENT_ATTRIBUTE_HITS" == 0 && "$FORBIDDEN_ITEM_LITERAL_HITS" == 0 ]]; then
+      echo 'diagnostic_source_audit=PASS'
+    else
+      echo 'diagnostic_source_audit=FAIL'
+    fi
+  } > "$OUT/diagnostic-source-audit.txt"
+  [[ "$FORBIDDEN_SOURCE_API_HITS" == 0 && "$KAXVALUE_ATTRIBUTE_COPY_HITS" == 0 && "$FORBIDDEN_CONTENT_ATTRIBUTE_HITS" == 0 && "$FORBIDDEN_ITEM_LITERAL_HITS" == 0 ]]
+  swiftc "$GITHUB_WORKSPACE/ax-easel-item-diagnostic.swift" -o "$RAW/ax-easel-item-diagnostic"
+fi
 open -na "$ARC_APP"
 sleep 35
 PID_SCAN="$(ps -axo pid=,comm= | awk -v n="$BIN" '
@@ -128,13 +147,13 @@ PID_SCAN="$(ps -axo pid=,comm= | awk -v n="$BIN" '
 IFS=$'\t' read -r PID_COUNT PID <<< "$PID_SCAN"
 [[ "$PID_COUNT" == 1 ]]
 [[ "$PID" =~ ^[0-9]+$ ]]
-if [[ "${COV_STAGE:-}" == easel-item-capability-map ]]; then
+if [[ "${COV_STAGE:-}" == easel-item-capability-map || "${COV_STAGE:-}" == easel-item-diagnostic ]]; then
   "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/initial-process-gate.txt"
   {
     echo "timestamp=$(now)"
     echo "pid_count=$(ps -axo command= | grep -F "$ARC_APP/Contents/" | grep -v grep | wc -l | tr -d ' ')"
     echo "generic_ax_map_skipped=true"
-    echo "ax_value_reads=0"
+    echo "kaxvalue_attribute_reads=0"
     echo "ax_actions_performed=0"
     echo "keyboard_events=0"
     echo "screenshots=0"
@@ -766,4 +785,125 @@ if [[ "${COV_STAGE:-}" == easel-item-capability-map ]]; then
     echo "screenshots=0"
     echo "objects_created=0"
   } > "$OUT/easel-item-capability-summary.txt"
+fi
+
+if [[ "${COV_STAGE:-}" == easel-item-diagnostic ]]; then
+  [[ "$(ps -p "$PID" -o comm= | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')" == "$BIN" ]]
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/process-gate.txt"
+  "$RAW/ax-login-nav" "$PID" "$BIN" > "$OUT/login-navigation.txt"
+  set +e
+  "$RAW/ax-login-a-once" "$PID" "$BIN" > "$OUT/login-a-once.txt"
+  LOGIN_RC=$?
+  unset ARC_EMAIL ARC_PASSWORD
+  set -e
+  echo "login_rc=$LOGIN_RC" > "$OUT/login-result.txt"
+  if (( LOGIN_RC != 0 )); then
+    exit "$LOGIN_RC"
+  fi
+
+  sleep 60
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/signed-in-process-gate.txt"
+  set +e
+  "$RAW/ax-view-easels-once" "$PID" "$BIN" > "$OUT/view-easels-action.txt"
+  VIEW_RC=$?
+  set -e
+  echo "view_easels_rc=$VIEW_RC" > "$OUT/view-easels-result.txt"
+  if (( VIEW_RC != 0 )); then
+    exit "$VIEW_RC"
+  fi
+
+  sleep 15
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/post-view-process-gate.txt"
+  set +e
+  "$RAW/ax-easel-item-diagnostic" "$PID" "$BIN" > "$OUT/easel-item-diagnostic.txt"
+  DIAGNOSTIC_RC=$?
+  set -e
+  echo "diagnostic_rc=$DIAGNOSTIC_RC" > "$OUT/diagnostic-result.txt"
+  if (( DIAGNOSTIC_RC != 0 )); then
+    exit "$DIAGNOSTIC_RC"
+  fi
+
+  BAD_SCHEMA_LINES="$({ LC_ALL=C grep -Ev '^[a-z0-9_]+=(true|false|PASS|FAIL|SKIPPED|-?[0-9]+)$' "$OUT/easel-item-diagnostic.txt" || true; } | wc -l | tr -d ' ')"
+  DUPLICATE_KEYS="$(cut -d= -f1 "$OUT/easel-item-diagnostic.txt" | LC_ALL=C sort | uniq -d | wc -l | tr -d ' ')"
+  [[ "$BAD_SCHEMA_LINES" == 0 && "$DUPLICATE_KEYS" == 0 ]]
+  for required_key in \
+    diagnostic_schema process_gate probe_topology_started probe_topology_finished \
+    standard_window_count library_candidate_count grid_count image_count label_count canvas_count \
+    grid_role_subrole_expected image_role_subrole_expected label_role_subrole_expected \
+    grid_enabled_expected image_enabled_expected label_enabled_expected \
+    sign_out_count close_library_count hide_easels_count window_main window_focused \
+    parent_chain_to_window pid_equality_all candidate_descendant_of_canvas topology_ready \
+    fixed_path_child_copy_error_count fixed_path_child_copy_first_error_rc \
+    probe_parameterized_grid_finished probe_parameterized_image_finished probe_parameterized_label_finished \
+    parameterized_grid_rc parameterized_image_rc parameterized_label_rc \
+    probe_settable_grid_finished probe_settable_image_finished probe_settable_label_finished \
+    settable_grid_total settable_image_total settable_label_total \
+    value_settable_grid value_settable_image value_settable_label \
+    probe_window_relation_finished window_relation_grid_rc top_level_relation_grid_rc \
+    window_relation_grid_unsupported_normalized top_level_relation_grid_unsupported_normalized \
+    probe_position_window_finished probe_size_window_finished \
+    probe_position_scroll_finished probe_size_scroll_finished \
+    probe_position_grid_finished probe_size_grid_finished \
+    probe_position_image_finished probe_size_image_finished \
+    probe_position_label_finished probe_size_label_finished \
+    probe_activation_grid_finished probe_activation_image_finished probe_activation_label_finished \
+    probe_display_finished probe_containment_finished probe_stability_finished \
+    geometry_axvalue_decode_count \
+    capability_ready geometry_ready diagnostic_complete; do
+    [[ "$(grep -Ec "^${required_key}=" "$OUT/easel-item-diagnostic.txt")" == 1 ]]
+  done
+  grep -Fxq 'diagnostic_schema=1' "$OUT/easel-item-diagnostic.txt"
+  grep -Fxq 'diagnostic_complete=true' "$OUT/easel-item-diagnostic.txt"
+
+  CAPABILITY_READY="$(awk -F= '$1=="capability_ready"{print $2}' "$OUT/easel-item-diagnostic.txt")"
+  GEOMETRY_READY="$(awk -F= '$1=="geometry_ready"{print $2}' "$OUT/easel-item-diagnostic.txt")"
+  [[ "$CAPABILITY_READY" == true || "$CAPABILITY_READY" == false ]]
+  [[ "$GEOMETRY_READY" == true || "$GEOMETRY_READY" == false ]]
+  [[ -z "${ARC_EMAIL+x}" && -z "${ARC_PASSWORD+x}" ]]
+
+  ROUTE_HITS="$({ LC_ALL=C grep -ERai '(^|[^A-Za-z0-9.-])(https://)?arc\.net/e/[A-Za-z0-9_-]{8,128}([^A-Za-z0-9_-]|$)' "$OUT" || true; } | wc -l | tr -d ' ')"
+  EMAIL_HITS="$({ LC_ALL=C grep -ERai '[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}' "$OUT" || true; } | wc -l | tr -d ' ')"
+  GENERIC_SECRET_HITS="$({ LC_ALL=C grep -ERa -- '-----BEGIN (RSA|EC|OPENSSH|DSA|PGP) PRIVATE KEY-----|github_pat_[A-Za-z0-9_]+|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|Bearer[[:space:]]+[A-Za-z0-9._~+/=-]{16,}|eyJ[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{8,}' "$OUT" || true; } | wc -l | tr -d ' ')"
+  ITEM_CONTENT_HITS="$({ LC_ALL=C grep -ERai 'Untitled Easel|Easel Canvas View' "$OUT" || true; } | wc -l | tr -d ' ')"
+  {
+    echo "exact_arc_easel_route_hits=$ROUTE_HITS"
+    echo "email_pattern_hits=$EMAIL_HITS"
+    echo "generic_secret_pattern_hits=$GENERIC_SECRET_HITS"
+    echo "item_content_pattern_hits=$ITEM_CONTENT_HITS"
+    echo "credential_environment_names_present=0"
+    echo "exact_secret_value_scan=unavailable_encrypted_repository_secrets"
+  } > "$OUT/route-secret-scan.txt"
+  [[ "$ROUTE_HITS" == 0 && "$EMAIL_HITS" == 0 && "$GENERIC_SECRET_HITS" == 0 && "$ITEM_CONTENT_HITS" == 0 ]]
+
+  {
+    echo "login_rc=$LOGIN_RC"
+    echo "view_easels_rc=$VIEW_RC"
+    echo "diagnostic_rc=$DIAGNOSTIC_RC"
+    echo "diagnostic_complete=1"
+    echo "workflow_success_instrumentation_only=true"
+    echo "capability_ready=$CAPABILITY_READY"
+    echo "geometry_ready=$GEOMETRY_READY"
+    echo "login_navigation_actions=3"
+    echo "sign_in_press=1"
+    echo "view_easels_press=1"
+    echo "view_easels_retries=0"
+    echo "diagnostic_action_invocations=0"
+    echo "ax_value_attribute_reads=0"
+    echo "geometry_axvalue_decode_probe=true"
+    echo "parameterized_value_invocations=0"
+    echo "scroll_to_visible_invocations=0"
+    echo "show_menu_invocations=0"
+    echo "context_menu_actions=0"
+    echo "right_clicks=0"
+    echo "delete_actions=0"
+    echo "new_easel_actions=0"
+    echo "content_actions=0"
+    echo "marker_actions=0"
+    echo "share_actions=0"
+    echo "confirm_actions=0"
+    echo "cancel_actions=0"
+    echo "sign_out_actions=0"
+    echo "screenshots=0"
+    echo "objects_created=0"
+  } > "$OUT/easel-item-diagnostic-summary.txt"
 fi
