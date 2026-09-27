@@ -41,8 +41,8 @@ jobs:
 
       - name: Verify signed Arc and query retained account read-only
         env:
-          ARC_EMAIL: ${{ secrets.ARC_EMAIL }}
-          ARC_PASSWORD: ${{ secrets.ARC_PASSWORD }}
+          ARC_EMAIL: ${{ secrets.ARC_A_EMAIL }}
+          ARC_PASSWORD: ${{ secrets.ARC_A_PASSWORD }}
         shell: bash
         run: |
           set -euo pipefail
