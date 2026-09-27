@@ -100,8 +100,8 @@ guard let window = nodeAt(root, [0]),
       CFGetTypeID(ownerWindow) == AXUIElementGetTypeID(),
       CFEqual(ownerWindow, window) else { exit(161) }
 
-guard let activation = pointAttr(privacy, kAXActivationPointAttribute as CFString),
-      let frame = rectAttr(privacy, kAXFrameAttribute as CFString),
+guard let activation = pointAttr(privacy, "AXActivationPoint" as CFString),
+      let frame = rectAttr(privacy, "AXFrame" as CFString),
       let position = pointAttr(privacy, kAXPositionAttribute as CFString),
       let size = sizeAttr(privacy, kAXSizeAttribute as CFString),
       let mainVisible = NSScreen.main?.visibleFrame else { exit(162) }
@@ -118,4 +118,3 @@ print("frame_x=\(frame.origin.x) frame_y=\(frame.origin.y) frame_width=\(frame.s
 print("position_x=\(position.x) position_y=\(position.y) size_width=\(size.width) size_height=\(size.height)")
 print("main_visible_x=\(mainVisible.origin.x) main_visible_y=\(mainVisible.origin.y) main_visible_width=\(mainVisible.size.width) main_visible_height=\(mainVisible.size.height)")
 print("attribute_values_read=5 privacy_actions_performed=0 keyboard_events=0 screenshots=0 account_actions=0 object_actions=0 share_actions=0")
-
