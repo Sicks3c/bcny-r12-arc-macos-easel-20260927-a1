@@ -112,6 +112,7 @@ swiftc "$GITHUB_WORKSPACE/ax-geometry.swift" -o "$RAW/ax-geometry"
 swiftc "$GITHUB_WORKSPACE/ax-checkbox-calibration.swift" -o "$RAW/ax-checkbox-calibration"
 swiftc "$GITHUB_WORKSPACE/ax-checkbox-calibration-hid.swift" -o "$RAW/ax-checkbox-calibration-hid"
 swiftc "$GITHUB_WORKSPACE/ax-create-account.swift" -o "$RAW/ax-create-account"
+swiftc "$GITHUB_WORKSPACE/ax-login-nav.swift" -o "$RAW/ax-login-nav"
 open -na "$ARC_APP"
 sleep 35
 PID="$(ps -axo pid=,command= | awk -v n="$ARC_APP/Contents/MacOS/Arc" 'index($0,n){print $1; exit}')"
@@ -406,4 +407,27 @@ if [[ "${COV_STAGE:-}" == recovery-signin-map ]]; then
     echo "object_actions=0"
     echo "share_actions=0"
   } > "$OUT/recovery-signin-map-summary.txt"
+fi
+
+if [[ "${COV_STAGE:-}" == login-form-map ]]; then
+  [[ "$(ps -p "$PID" -o comm= | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')" == "$BIN" ]]
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/process-gate.txt"
+  "$RAW/ax-login-nav" "$PID" "$BIN" > "$OUT/login-navigation.txt"
+  "$RAW/ax-map" "$PID" > "$OUT/ax-tree-login-form.tsv"
+  EMAIL_HITS="$(grep -Ec $'^[^\t]+\tAXTextField\t[^\t]*\tEmail\t' "$OUT/ax-tree-login-form.tsv" || true)"
+  PASSWORD_HITS="$(grep -Ec $'^[^\t]+\tAXTextField\t[^\t]*\tPassword\t' "$OUT/ax-tree-login-form.tsv" || true)"
+  SIGNIN_HITS="$(grep -Ec $'^[^\t]+\tAXButton\t[^\t]*\t[^\t]*\t[^\t]*\tSign in\t' "$OUT/ax-tree-login-form.tsv" || true)"
+  {
+    echo "login_form_nodes=$(($(wc -l < "$OUT/ax-tree-login-form.tsv")-1))"
+    echo "email_identifier_hits=$EMAIL_HITS"
+    echo "password_identifier_hits=$PASSWORD_HITS"
+    echo "signin_description_hits=$SIGNIN_HITS"
+    echo "ax_values_read=0"
+    echo "ax_values_written=0"
+    echo "keyboard_events=0"
+    echo "screenshots=0"
+    echo "account_state_actions=0"
+    echo "object_actions=0"
+    echo "share_actions=0"
+  } > "$OUT/login-form-map-summary.txt"
 fi
