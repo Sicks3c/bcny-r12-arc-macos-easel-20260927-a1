@@ -111,6 +111,7 @@ swiftc "$GITHUB_WORKSPACE/ax-signup-secure-opaque.swift" -o "$RAW/ax-signup-secu
 swiftc "$GITHUB_WORKSPACE/ax-geometry.swift" -o "$RAW/ax-geometry"
 swiftc "$GITHUB_WORKSPACE/ax-checkbox-calibration.swift" -o "$RAW/ax-checkbox-calibration"
 swiftc "$GITHUB_WORKSPACE/ax-checkbox-calibration-hid.swift" -o "$RAW/ax-checkbox-calibration-hid"
+swiftc "$GITHUB_WORKSPACE/ax-create-account.swift" -o "$RAW/ax-create-account"
 open -na "$ARC_APP"
 sleep 35
 PID="$(ps -axo pid=,command= | awk -v n="$ARC_APP/Contents/MacOS/Arc" 'index($0,n){print $1; exit}')"
@@ -343,4 +344,45 @@ if [[ "${COV_STAGE:-}" == checkbox-calibration-hid ]]; then
     echo "share_actions=0"
     echo "screenshots=0"
   } > "$OUT/calibration-summary.txt"
+fi
+
+if [[ "${COV_STAGE:-}" == create-account-a ]]; then
+  test -n "${MAIL_ID:-}"
+  test -n "${MAIL_TOKEN:-}"
+  MAIL_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 -H "Authorization: Bearer $MAIL_TOKEN" "https://api.mail.tm/accounts/$MAIL_ID")"
+  unset MAIL_ID MAIL_TOKEN
+  echo "mailbox_owner_precheck=$MAIL_STATUS" > "$OUT/mailbox-precheck.txt"
+  [[ "$MAIL_STATUS" == 200 ]]
+  "$RAW/ax-step" "$PID" right > "$OUT/action-right.txt"
+  sleep 8
+  "$RAW/ax-map" "$PID" > "$OUT/ax-tree-signup.tsv"
+  [[ "$(ps -p "$PID" -o comm= | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')" == "$BIN" ]]
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/process-gate.txt"
+  set +e
+  "$RAW/ax-create-account" "$PID" > "$OUT/create-account.txt"
+  CREATE_RC=$?
+  unset ARC_NAME ARC_EMAIL ARC_PASSWORD
+  set -e
+  echo "create_rc=$CREATE_RC" > "$OUT/create-result.txt"
+  sleep 60
+  "$RAW/ax-map" "$PID" > "$OUT/ax-tree-post-create.tsv"
+
+  FORM_HITS="$(awk -F '\t' '$4=="Name" || $4=="Email" || $4=="Password" || $4=="Confirm Password" || $4=="PrivacyCheckbox" || $6=="Create an account" {n++} END{print n+0}' "$OUT/ax-tree-post-create.tsv")"
+  NEW_EASEL_HITS="$(awk -F '\t' '$2=="AXMenuItem" && $4=="newEaselMenuItemId" && $5=="New Easel" && $9=="true" && $11=="AXCancel,AXPick,AXPress" {n++} END{print n+0}' "$OUT/ax-tree-post-create.tsv")"
+  VIEW_LIBRARY_HITS="$(awk -F '\t' '$2=="AXMenuItem" && $5=="View Library" && $9=="true" && $11=="AXCancel,AXPick,AXPress" {n++} END{print n+0}' "$OUT/ax-tree-post-create.tsv")"
+  VIEW_EASELS_HITS="$(awk -F '\t' '$2=="AXMenuItem" && $5=="View Easels & Notes" && $9=="true" && $11=="AXCancel,AXPick,AXPress" {n++} END{print n+0}' "$OUT/ax-tree-post-create.tsv")"
+  awk -F '\t' 'tolower($0) ~ /account preferences|delete account|sign out/ {print}' "$OUT/ax-tree-post-create.tsv" > "$OUT/account-cleanup-candidates.tsv"
+  {
+    echo "create_rc=$CREATE_RC"
+    echo "form_hits=$FORM_HITS"
+    echo "new_easel_exact_enabled_hits=$NEW_EASEL_HITS"
+    echo "view_library_exact_enabled_hits=$VIEW_LIBRARY_HITS"
+    echo "view_easels_exact_enabled_hits=$VIEW_EASELS_HITS"
+    echo "cleanup_candidate_rows=$(wc -l < "$OUT/account-cleanup-candidates.tsv" | tr -d ' ')"
+    echo "object_actions=0"
+    echo "share_actions=0"
+  } > "$OUT/post-create-gates.txt"
+  if (( CREATE_RC != 0 )) || (( FORM_HITS != 0 )) || (( NEW_EASEL_HITS != 1 )) || (( VIEW_LIBRARY_HITS != 1 )) || (( VIEW_EASELS_HITS != 1 )); then
+    exit 220
+  fi
 fi

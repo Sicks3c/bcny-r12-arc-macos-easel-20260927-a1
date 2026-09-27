@@ -1,0 +1,32 @@
+name: cov039-create-account-a
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  create:
+    runs-on: macos-14
+    timeout-minutes: 55
+    env:
+      COV_STAGE: create-account-a
+      ARC_NAME: ${{ secrets.ARC_A_NAME }}
+      ARC_EMAIL: ${{ secrets.ARC_A_EMAIL }}
+      ARC_PASSWORD: ${{ secrets.ARC_A_PASSWORD }}
+      MAIL_ID: ${{ secrets.MAIL_A_ID }}
+      MAIL_TOKEN: ${{ secrets.MAIL_A_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create one owned A account and map signed-in selectors
+        shell: bash
+        run: bash ./collect-preflight.sh
+      - name: Upload sanitized post-create evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cov039-create-account-a
+          path: ${{ runner.temp }}/evidence
+          if-no-files-found: error
+          retention-days: 1
