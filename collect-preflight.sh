@@ -119,12 +119,33 @@ swiftc "$GITHUB_WORKSPACE/ax-view-easels-once.swift" -o "$RAW/ax-view-easels-onc
 swiftc "$GITHUB_WORKSPACE/ax-create-blank-easel-once.swift" -o "$RAW/ax-create-blank-easel-once"
 swiftc "$GITHUB_WORKSPACE/ax-easel-route-hash.swift" -o "$RAW/ax-easel-route-hash"
 swiftc "$GITHUB_WORKSPACE/ax-easel-item-capability.swift" -o "$RAW/ax-easel-item-capability"
-if [[ "${COV_STAGE:-}" == favorite-selector-map || "${COV_STAGE:-}" == favorite-command-calibration ]]; then
+if [[ "${COV_STAGE:-}" == favorite-selector-map || "${COV_STAGE:-}" == favorite-command-calibration || "${COV_STAGE:-}" == favorite-action-once ]]; then
   FAVORITE_SOURCE="$GITHUB_WORKSPACE/ax-favorite-selector-map.swift"
   FORBIDDEN_FAVORITE_SOURCE_HITS="$({ LC_ALL=C grep -Ec 'AXUIElementPerformAction|AXUIElementSetAttributeValue|AXUIElementCopyParameterizedAttributeValue|CGEvent(Post|Create|Source|Tap)|postToPid|\.post\(tap:|CGWindowListCreateImage|screencapture|NSPasteboard|kAXValueAttribute' "$FAVORITE_SOURCE" || true; })"
   echo "forbidden_favorite_source_hits=$FORBIDDEN_FAVORITE_SOURCE_HITS" > "$OUT/favorite-source-audit.txt"
   [[ "$FORBIDDEN_FAVORITE_SOURCE_HITS" == 0 ]]
   swiftc "$FAVORITE_SOURCE" -o "$RAW/ax-favorite-selector-map"
+fi
+if [[ "${COV_STAGE:-}" == favorite-action-once ]]; then
+  FAVORITE_ACTION_SOURCE="$GITHUB_WORKSPACE/ax-favorite-action-once.swift"
+  PERFORM_HITS="$({ LC_ALL=C grep -Ec 'AXUIElementPerformAction' "$FAVORITE_ACTION_SOURCE" || true; })"
+  SET_HITS="$({ LC_ALL=C grep -Ec 'AXUIElementSetAttributeValue' "$FAVORITE_ACTION_SOURCE" || true; })"
+  EVENT_HITS="$({ LC_ALL=C grep -Ec 'postToPid' "$FAVORITE_ACTION_SOURCE" || true; })"
+  ENTER_CALL_HITS="$({ LC_ALL=C grep -Ec 'sendKey\(36, to: pid\)' "$FAVORITE_ACTION_SOURCE" || true; })"
+  DOWN_CALL_HITS="$({ LC_ALL=C grep -Ec 'sendKey\(125, to: pid\)' "$FAVORITE_ACTION_SOURCE" || true; })"
+  ESCAPE_CALL_HITS="$({ LC_ALL=C grep -Ec 'sendKey\(53, to: pid\)' "$FAVORITE_ACTION_SOURCE" || true; })"
+  FORBIDDEN_ACTION_HITS="$({ LC_ALL=C grep -Ec 'AXUIElementCopyParameterizedAttributeValue|CGEventPost|\.post\(tap:|CGWindowListCreateImage|screencapture|NSPasteboard|kAXURLAttribute|kAXDocumentAttribute|kAXFilenameAttribute' "$FAVORITE_ACTION_SOURCE" || true; })"
+  {
+    echo "perform_action_source_hits=$PERFORM_HITS"
+    echo "set_attribute_source_hits=$SET_HITS"
+    echo "post_to_pid_source_hits=$EVENT_HITS"
+    echo "enter_call_source_hits=$ENTER_CALL_HITS"
+    echo "down_call_source_hits=$DOWN_CALL_HITS"
+    echo "escape_call_source_hits=$ESCAPE_CALL_HITS"
+    echo "forbidden_action_source_hits=$FORBIDDEN_ACTION_HITS"
+  } > "$OUT/favorite-action-source-audit.txt"
+  [[ "$PERFORM_HITS" == 1 && "$SET_HITS" == 1 && "$EVENT_HITS" == 4 && "$ENTER_CALL_HITS" == 1 && "$DOWN_CALL_HITS" == 1 && "$ESCAPE_CALL_HITS" == 1 && "$FORBIDDEN_ACTION_HITS" == 0 ]]
+  swiftc "$FAVORITE_ACTION_SOURCE" -o "$RAW/ax-favorite-action-once"
 fi
 if [[ "${COV_STAGE:-}" == favorite-command-calibration ]]; then
   FAVORITE_COMMAND_SOURCE="$GITHUB_WORKSPACE/ax-favorite-command-calibration.swift"
@@ -145,6 +166,7 @@ if [[ "${COV_STAGE:-}" == favorite-command-calibration ]]; then
   [[ "$PERFORM_HITS" == 1 && "$SET_HITS" == 2 && "$EVENT_HITS" == 6 && "$SCOPED_VALUE_READ_HITS" == 1 && "$SCOPED_SELECTION_READ_HITS" == 2 && "$FORBIDDEN_COMMAND_HITS" == 0 ]]
   swiftc "$FAVORITE_COMMAND_SOURCE" -o "$RAW/ax-favorite-command-calibration"
 fi
+
 if [[ "${COV_STAGE:-}" == easel-item-diagnostic ]]; then
   FORBIDDEN_SOURCE_API_HITS="$({ LC_ALL=C grep -Ec 'AXUIElementPerformAction|AXUIElementSetAttributeValue|AXUIElementCopyElementAtPosition|AXUIElementCopyParameterizedAttributeValue|CGEvent(Post|Create|Source|Tap)|postToPid|\.post\(tap:|CGWindowListCreateImage|screencapture|NSPasteboard' "$GITHUB_WORKSPACE/ax-easel-item-diagnostic.swift" || true; })"
   KAXVALUE_ATTRIBUTE_COPY_HITS="$({ LC_ALL=C grep -Ec 'copyAttribute\([^,]+,[[:space:]]*kAXValueAttribute' "$GITHUB_WORKSPACE/ax-easel-item-diagnostic.swift" || true; })"
@@ -836,6 +858,48 @@ if [[ "${COV_STAGE:-}" == favorite-command-calibration ]]; then
     echo "easel_actions=0"
     echo "screenshots=0"
   } > "$OUT/favorite-command-summary.txt"
+fi
+
+if [[ "${COV_STAGE:-}" == favorite-action-once ]]; then
+  [[ "$(ps -p "$PID" -o comm= | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')" == "$BIN" ]]
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/process-gate.txt"
+  "$RAW/ax-login-nav" "$PID" "$BIN" > "$OUT/login-navigation.txt"
+  set +e
+  "$RAW/ax-login-a-once" "$PID" "$BIN" > "$OUT/login-a-once.txt"
+  LOGIN_RC=$?
+  unset ARC_EMAIL ARC_PASSWORD
+  set -e
+  echo "login_rc=$LOGIN_RC" > "$OUT/login-result.txt"
+  if (( LOGIN_RC != 0 )); then
+    exit "$LOGIN_RC"
+  fi
+  sleep 60
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/post-login-process-gate.txt"
+  "$RAW/ax-favorite-selector-map" "$PID" "$BIN" > "$OUT/favorite-action-baseline.tsv"
+  set +e
+  "$RAW/ax-favorite-action-once" "$PID" "$BIN" > "$OUT/favorite-action-once.tsv"
+  ACTION_RC=$?
+  set -e
+  echo "favorite_action_rc=$ACTION_RC" > "$OUT/favorite-action-result.txt"
+  if (( ACTION_RC != 0 )); then
+    exit "$ACTION_RC"
+  fi
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/post-action-process-gate.txt"
+  "$RAW/ax-favorite-selector-map" "$PID" "$BIN" > "$OUT/favorite-action-restored.tsv"
+  cmp "$OUT/favorite-action-baseline.tsv" "$OUT/favorite-action-restored.tsv"
+  {
+    echo "login_rc=$LOGIN_RC"
+    echo "favorite_action_rc=$ACTION_RC"
+    echo "baseline_restored=true"
+    echo "new_tab_presses=1"
+    echo "favorite_actions=1"
+    echo "close_tab_presses=1"
+    echo "disposable_tab_closed=true"
+    echo "preview_actions=0"
+    echo "provider_actions=0"
+    echo "easel_actions=0"
+    echo "screenshots=0"
+  } > "$OUT/favorite-action-summary.txt"
 fi
 
 if [[ "${COV_STAGE:-}" == view-easels-map ]]; then
