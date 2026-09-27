@@ -105,6 +105,8 @@ swiftc "$GITHUB_WORKSPACE/ax-map.swift" -o "$RAW/ax-map"
 swiftc "$GITHUB_WORKSPACE/ax-step.swift" -o "$RAW/ax-step"
 swiftc "$GITHUB_WORKSPACE/ax-signup.swift" -o "$RAW/ax-signup"
 swiftc "$GITHUB_WORKSPACE/ax-capability.swift" -o "$RAW/ax-capability"
+swiftc "$GITHUB_WORKSPACE/ax-process-gate.swift" -o "$RAW/ax-process-gate"
+swiftc "$GITHUB_WORKSPACE/ax-signup-keyboard.swift" -o "$RAW/ax-signup-keyboard"
 open -na "$ARC_APP"
 sleep 35
 PID="$(ps -axo pid=,command= | awk -v n="$ARC_APP/Contents/MacOS/Arc" 'index($0,n){print $1; exit}')"
@@ -186,4 +188,37 @@ if [[ "${COV_STAGE:-}" == privacy-map ]]; then
     echo "object_actions=0"
     echo "share_actions=0"
   } > "$OUT/privacy-map-summary.txt"
+fi
+
+if [[ "${COV_STAGE:-}" == signup-a-keyboard ]]; then
+  test -n "${MAIL_ID:-}"
+  test -n "${MAIL_TOKEN:-}"
+  MAIL_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 -H "Authorization: Bearer $MAIL_TOKEN" "https://api.mail.tm/accounts/$MAIL_ID")"
+  unset MAIL_ID MAIL_TOKEN
+  echo "mailbox_owner_precheck=$MAIL_STATUS" > "$OUT/mailbox-precheck.txt"
+  [[ "$MAIL_STATUS" == 200 ]]
+  "$RAW/ax-step" "$PID" right > "$OUT/action-right.txt"
+  sleep 8
+  "$RAW/ax-map" "$PID" > "$OUT/ax-tree-signup.tsv"
+  [[ "$(ps -p "$PID" -o comm= | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')" == "$BIN" ]]
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/process-gate.txt"
+  set +e
+  "$RAW/ax-signup-keyboard" "$PID" > "$OUT/action-signup-keyboard.txt"
+  INPUT_RC=$?
+  unset ARC_NAME ARC_EMAIL ARC_PASSWORD
+  set -e
+  echo "input_rc=$INPUT_RC" > "$OUT/input-result.txt"
+  [[ "$INPUT_RC" == 0 ]]
+  sleep 45
+  "$RAW/ax-map" "$PID" > "$OUT/ax-tree-post-signup.tsv"
+  {
+    echo "post_signup_nodes=$(($(wc -l < "$OUT/ax-tree-post-signup.tsv")-1))"
+    echo "post_signup_windows=$(awk -F '\t' '$2==\"AXWindow\"{n++} END{print n+0}' "$OUT/ax-tree-post-signup.tsv")"
+    echo "post_signup_new_easel_hits=$(grep -iEc 'new easel' "$OUT/ax-tree-post-signup.tsv" || true)"
+    echo "post_signup_library_hits=$(grep -iEc 'view library|view easels' "$OUT/ax-tree-post-signup.tsv" || true)"
+    echo "post_signup_account_hits=$(grep -iEc 'account preferences|delete account|sign out|log out' "$OUT/ax-tree-post-signup.tsv" || true)"
+    echo "credential_values_logged=0"
+    echo "object_actions=0"
+    echo "share_actions=0"
+  } > "$OUT/post-signup-summary.txt"
 fi

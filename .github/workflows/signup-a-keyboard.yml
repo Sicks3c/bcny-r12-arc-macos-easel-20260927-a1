@@ -1,0 +1,32 @@
+name: cov039-signup-a-keyboard
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  signup:
+    runs-on: macos-14
+    timeout-minutes: 50
+    env:
+      COV_STAGE: signup-a-keyboard
+      ARC_NAME: ${{ secrets.ARC_A_NAME }}
+      ARC_EMAIL: ${{ secrets.ARC_A_EMAIL }}
+      ARC_PASSWORD: ${{ secrets.ARC_A_PASSWORD }}
+      MAIL_ID: ${{ secrets.MAIL_A_ID }}
+      MAIL_TOKEN: ${{ secrets.MAIL_A_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Input credentials with exact direct-keyboard gates
+        shell: bash
+        run: bash ./collect-preflight.sh
+      - name: Upload sanitized structural evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cov039-signup-a-keyboard
+          path: ${{ runner.temp }}/evidence
+          if-no-files-found: error
+          retention-days: 1
