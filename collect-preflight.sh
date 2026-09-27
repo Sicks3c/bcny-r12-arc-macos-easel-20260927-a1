@@ -97,6 +97,7 @@ grep -Fq 'EaselClient.createEasel' "$OUT/static-cleanup-contracts.txt"
 grep -Fq 'EaselClient.deleteEasel' "$OUT/static-cleanup-contracts.txt"
 
 swiftc "$GITHUB_WORKSPACE/ax-map.swift" -o "$RAW/ax-map"
+swiftc "$GITHUB_WORKSPACE/ax-step.swift" -o "$RAW/ax-step"
 open -na "$ARC_APP"
 sleep 35
 PID="$(ps -axo pid=,command= | awk -v n="$ARC_APP/Contents/MacOS/Arc" 'index($0,n){print $1; exit}')"
@@ -116,3 +117,20 @@ test -n "$PID"
   echo "account_actions=0"
   echo "object_actions=0"
 } > "$OUT/preflight-summary.txt"
+
+if [[ "${COV_STAGE:-}" == next ]]; then
+  "$RAW/ax-step" "$PID" right > "$OUT/action.txt"
+  sleep 8
+  "$RAW/ax-map" "$PID" > "$OUT/ax-tree-after.tsv"
+  {
+    echo "after_nodes=$(($(wc -l < "$OUT/ax-tree-after.tsv")-1))"
+    echo "after_right_hits=$(grep -Ec $'AXButton\\t[^\\t]*\\t[^\\t]*\\tRight\\t' "$OUT/ax-tree-after.tsv" || true)"
+    echo "after_signin_hits=$(grep -iEc 'sign in|sign up|email|password|account' "$OUT/ax-tree-after.tsv" || true)"
+    echo "ax_values_read=0"
+    echo "ax_actions_performed=1"
+    echo "keyboard_events=0"
+    echo "screenshots=0"
+    echo "account_actions=0"
+    echo "object_actions=0"
+  } > "$OUT/after-summary.txt"
+fi
