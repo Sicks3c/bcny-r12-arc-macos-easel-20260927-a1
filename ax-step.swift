@@ -45,11 +45,11 @@ let stage = CommandLine.arguments[2]
 if stage == "right" {
     guard let target = nodeAt(root, indices: [0, 0, 21]),
           stringAttr(target, kAXRoleAttribute as CFString) == "AXButton",
-          stringAttr(target, kAXTitleAttribute as CFString) == "Right",
-          stringAttr(target, kAXDescriptionAttribute as CFString) == "",
+          stringAttr(target, kAXTitleAttribute as CFString) == "",
+          stringAttr(target, kAXDescriptionAttribute as CFString) == "Right",
           actions(target) == ["AXPress"] else { exit(71) }
     guard AXUIElementPerformAction(target, kAXPressAction as CFString) == .success else { exit(72) }
-    print("action=right path=0/0/21 role=AXButton title=Right actions=AXPress result=success")
+    print("action=right path=0/0/21 role=AXButton description=Right actions=AXPress result=success")
 } else if stage == "signin" {
     guard let target = nodeAt(root, indices: [1, 9, 0, 19]),
           stringAttr(target, kAXRoleAttribute as CFString) == "AXMenuItem",
@@ -61,4 +61,3 @@ if stage == "right" {
 } else {
     exit(75)
 }
-
