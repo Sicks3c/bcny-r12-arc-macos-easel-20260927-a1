@@ -76,8 +76,8 @@ func typeUnicode(_ text: String, to pid: pid_t) -> Bool {
               let up = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: false) else { return false }
         down.keyboardSetUnicodeString(stringLength: 1, unicodeString: &scalar)
         up.keyboardSetUnicodeString(stringLength: 1, unicodeString: &scalar)
-        CGEventPostToPid(pid, down)
-        CGEventPostToPid(pid, up)
+        down.postToPid(pid)
+        up.postToPid(pid)
         Thread.sleep(forTimeInterval: 0.025)
     }
     return true
