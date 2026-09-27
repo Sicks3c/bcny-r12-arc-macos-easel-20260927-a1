@@ -138,12 +138,18 @@ let candidates = current.filter { path, _ in
     path == suggestionPath || path.hasPrefix(suggestionPath + "/")
 }
 guard candidates.count >= 2 else { exit(80) }
+let selectedRows = (copied(suggestionTables[0].1, kAXSelectedRowsAttribute as CFString) as? [AXUIElement]) ?? []
 
 var nonemptyScopedValues = 0
-print("candidate_path\trole\tsubrole\tidentifier\ttitle\tdescription\thelp\tscoped_value\tenabled\tactions")
+var selectedExactMoveRows = 0
+print("candidate_path\trole\tsubrole\tidentifier\ttitle\tdescription\thelp\tscoped_value\tselected\tenabled\tactions")
 for (path, element) in candidates {
     let scopedValue = stringAttr(element, kAXValueAttribute as CFString)
     if !scopedValue.isEmpty { nonemptyScopedValues += 1 }
+    let selectedByTable = selectedRows.contains { CFEqual($0, element) }
+    let selectedByRow = boolAttr(element, kAXSelectedAttribute as CFString) == true
+    let isSelected = selectedByTable || selectedByRow
+    if scopedValue == query && isSelected { selectedExactMoveRows += 1 }
     let row = [path,
                stringAttr(element, kAXRoleAttribute as CFString),
                stringAttr(element, kAXSubroleAttribute as CFString),
@@ -152,6 +158,7 @@ for (path, element) in candidates {
                stringAttr(element, kAXDescriptionAttribute as CFString),
                stringAttr(element, kAXHelpAttribute as CFString),
                scopedValue,
+               isSelected ? "true" : "false",
                boolAttr(element, kAXEnabledAttribute as CFString).map { $0 ? "true" : "false" } ?? "",
                actions(element).joined(separator: ",")]
     print(row.map(clean).joined(separator: "\t"))
@@ -170,4 +177,4 @@ Thread.sleep(forTimeInterval: 2.0)
 let finalNodes = allNodes(AXUIElementCreateApplication(pid))
 guard finalNodes.filter({ _, element in stringAttr(element, kAXIdentifierAttribute as CFString) == "commandBarTextField" }).isEmpty else { exit(78) }
 cleanupComplete = true
-print("summary\tquery=Move_to_Top_Apps\tfilter=unique_commandbar_suggestions_subtree\tscoped_value_nodes=\(candidates.count)\tnonempty_scoped_values=\(nonemptyScopedValues)\topen_command_press=1\tunicode_events=32\tvalue_sets=1\tescape_events=2\tcandidate_rows=\(candidates.count)\tcandidate_presses=0\tfavorite_actions=0\tpreview_actions=0\tprovider_actions=0\teasel_actions=0")
+print("summary\tquery=Move_to_Top_Apps\tfilter=unique_commandbar_suggestions_subtree\tscoped_value_nodes=\(candidates.count)\tnonempty_scoped_values=\(nonemptyScopedValues)\tselected_rows=\(selectedRows.count)\tselected_exact_move_rows=\(selectedExactMoveRows)\topen_command_press=1\tunicode_events=32\tvalue_sets=1\tescape_events=2\tcandidate_rows=\(candidates.count)\tcandidate_presses=0\tfavorite_actions=0\tpreview_actions=0\tprovider_actions=0\teasel_actions=0")

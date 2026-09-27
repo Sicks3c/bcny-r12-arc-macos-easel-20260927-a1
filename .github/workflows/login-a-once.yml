@@ -1,4 +1,4 @@
-name: cov065-favorite-command-scoped-values
+name: cov065-favorite-command-selection
 
 on:
   workflow_dispatch:
@@ -12,18 +12,18 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - name: Map scoped Favorite command suggestion values
+      - name: Map Favorite command selection
         shell: bash
         env:
           COV_STAGE: favorite-command-calibration
           ARC_EMAIL: ${{ secrets.ARC_A_EMAIL }}
           ARC_PASSWORD: ${{ secrets.ARC_A_PASSWORD }}
         run: bash ./collect-preflight.sh
-      - name: Upload sanitized scoped Favorite evidence
+      - name: Upload sanitized Favorite selection evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cov065-favorite-command-scoped-values
+          name: cov065-favorite-command-selection
           path: ${{ runner.temp }}/evidence
           if-no-files-found: error
           retention-days: 1
