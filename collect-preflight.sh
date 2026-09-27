@@ -131,14 +131,16 @@ if [[ "${COV_STAGE:-}" == favorite-command-calibration ]]; then
   PERFORM_HITS="$({ LC_ALL=C grep -Ec 'AXUIElementPerformAction' "$FAVORITE_COMMAND_SOURCE" || true; })"
   SET_HITS="$({ LC_ALL=C grep -Ec 'AXUIElementSetAttributeValue' "$FAVORITE_COMMAND_SOURCE" || true; })"
   EVENT_HITS="$({ LC_ALL=C grep -Ec 'postToPid' "$FAVORITE_COMMAND_SOURCE" || true; })"
+  SCOPED_VALUE_READ_HITS="$({ LC_ALL=C grep -Ec 'stringAttr\(element, kAXValueAttribute' "$FAVORITE_COMMAND_SOURCE" || true; })"
   FORBIDDEN_COMMAND_HITS="$({ LC_ALL=C grep -Ec 'AXUIElementCopyParameterizedAttributeValue|CGEventPost|\.post\(tap:|CGWindowListCreateImage|screencapture|NSPasteboard|kAXURLAttribute|kAXDocumentAttribute|kAXFilenameAttribute' "$FAVORITE_COMMAND_SOURCE" || true; })"
   {
     echo "perform_action_source_hits=$PERFORM_HITS"
     echo "set_attribute_source_hits=$SET_HITS"
     echo "post_to_pid_source_hits=$EVENT_HITS"
+    echo "scoped_value_read_source_hits=$SCOPED_VALUE_READ_HITS"
     echo "forbidden_command_source_hits=$FORBIDDEN_COMMAND_HITS"
   } > "$OUT/favorite-command-source-audit.txt"
-  [[ "$PERFORM_HITS" == 1 && "$SET_HITS" == 2 && "$EVENT_HITS" == 4 && "$FORBIDDEN_COMMAND_HITS" == 0 ]]
+  [[ "$PERFORM_HITS" == 1 && "$SET_HITS" == 2 && "$EVENT_HITS" == 4 && "$SCOPED_VALUE_READ_HITS" == 1 && "$FORBIDDEN_COMMAND_HITS" == 0 ]]
   swiftc "$FAVORITE_COMMAND_SOURCE" -o "$RAW/ax-favorite-command-calibration"
 fi
 if [[ "${COV_STAGE:-}" == easel-item-diagnostic ]]; then

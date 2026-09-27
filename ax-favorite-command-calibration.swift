@@ -128,21 +128,22 @@ guard typeUnicode(query, to: pid) else { exit(75) }
 Thread.sleep(forTimeInterval: 4.0)
 
 current = allNodes(AXUIElementCreateApplication(pid))
-let tokens = ["top apps", "favorite", "move to"]
-let candidates = current.filter { _, element in
-    let identifier = stringAttr(element, kAXIdentifierAttribute as CFString)
-    let text = [identifier,
-                stringAttr(element, kAXTitleAttribute as CFString),
-                stringAttr(element, kAXDescriptionAttribute as CFString),
-                stringAttr(element, kAXHelpAttribute as CFString)]
-        .joined(separator: " ").lowercased()
-    let loweredIdentifier = identifier.lowercased()
-    return (loweredIdentifier.contains("commandbar") && loweredIdentifier.contains("suggestion"))
-        || tokens.contains(where: { text.contains($0) })
+let suggestionTables = current.filter { _, element in
+    stringAttr(element, kAXRoleAttribute as CFString) == "AXTable"
+        && stringAttr(element, kAXIdentifierAttribute as CFString) == "commandBarSuggestions"
 }
+guard suggestionTables.count == 1 else { exit(79) }
+let suggestionPath = suggestionTables[0].0
+let candidates = current.filter { path, _ in
+    path == suggestionPath || path.hasPrefix(suggestionPath + "/")
+}
+guard candidates.count >= 2 else { exit(80) }
 
-print("candidate_path\trole\tsubrole\tidentifier\ttitle\tdescription\thelp\tenabled\tactions")
+var nonemptyScopedValues = 0
+print("candidate_path\trole\tsubrole\tidentifier\ttitle\tdescription\thelp\tscoped_value\tenabled\tactions")
 for (path, element) in candidates {
+    let scopedValue = stringAttr(element, kAXValueAttribute as CFString)
+    if !scopedValue.isEmpty { nonemptyScopedValues += 1 }
     let row = [path,
                stringAttr(element, kAXRoleAttribute as CFString),
                stringAttr(element, kAXSubroleAttribute as CFString),
@@ -150,6 +151,7 @@ for (path, element) in candidates {
                stringAttr(element, kAXTitleAttribute as CFString),
                stringAttr(element, kAXDescriptionAttribute as CFString),
                stringAttr(element, kAXHelpAttribute as CFString),
+               scopedValue,
                boolAttr(element, kAXEnabledAttribute as CFString).map { $0 ? "true" : "false" } ?? "",
                actions(element).joined(separator: ",")]
     print(row.map(clean).joined(separator: "\t"))
@@ -168,4 +170,4 @@ Thread.sleep(forTimeInterval: 2.0)
 let finalNodes = allNodes(AXUIElementCreateApplication(pid))
 guard finalNodes.filter({ _, element in stringAttr(element, kAXIdentifierAttribute as CFString) == "commandBarTextField" }).isEmpty else { exit(78) }
 cleanupComplete = true
-print("summary\tquery=Move_to_Top_Apps\tfilter=all_commandbar_suggestion_ids\topen_command_press=1\tunicode_events=32\tvalue_sets=1\tescape_events=2\tcandidate_rows=\(candidates.count)\tcandidate_presses=0\tfavorite_actions=0\tpreview_actions=0\tprovider_actions=0\teasel_actions=0")
+print("summary\tquery=Move_to_Top_Apps\tfilter=unique_commandbar_suggestions_subtree\tscoped_value_nodes=\(candidates.count)\tnonempty_scoped_values=\(nonemptyScopedValues)\topen_command_press=1\tunicode_events=32\tvalue_sets=1\tescape_events=2\tcandidate_rows=\(candidates.count)\tcandidate_presses=0\tfavorite_actions=0\tpreview_actions=0\tprovider_actions=0\teasel_actions=0")
