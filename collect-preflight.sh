@@ -119,12 +119,27 @@ swiftc "$GITHUB_WORKSPACE/ax-view-easels-once.swift" -o "$RAW/ax-view-easels-onc
 swiftc "$GITHUB_WORKSPACE/ax-create-blank-easel-once.swift" -o "$RAW/ax-create-blank-easel-once"
 swiftc "$GITHUB_WORKSPACE/ax-easel-route-hash.swift" -o "$RAW/ax-easel-route-hash"
 swiftc "$GITHUB_WORKSPACE/ax-easel-item-capability.swift" -o "$RAW/ax-easel-item-capability"
-if [[ "${COV_STAGE:-}" == favorite-selector-map ]]; then
+if [[ "${COV_STAGE:-}" == favorite-selector-map || "${COV_STAGE:-}" == favorite-command-calibration ]]; then
   FAVORITE_SOURCE="$GITHUB_WORKSPACE/ax-favorite-selector-map.swift"
   FORBIDDEN_FAVORITE_SOURCE_HITS="$({ LC_ALL=C grep -Ec 'AXUIElementPerformAction|AXUIElementSetAttributeValue|AXUIElementCopyParameterizedAttributeValue|CGEvent(Post|Create|Source|Tap)|postToPid|\.post\(tap:|CGWindowListCreateImage|screencapture|NSPasteboard|kAXValueAttribute' "$FAVORITE_SOURCE" || true; })"
   echo "forbidden_favorite_source_hits=$FORBIDDEN_FAVORITE_SOURCE_HITS" > "$OUT/favorite-source-audit.txt"
   [[ "$FORBIDDEN_FAVORITE_SOURCE_HITS" == 0 ]]
   swiftc "$FAVORITE_SOURCE" -o "$RAW/ax-favorite-selector-map"
+fi
+if [[ "${COV_STAGE:-}" == favorite-command-calibration ]]; then
+  FAVORITE_COMMAND_SOURCE="$GITHUB_WORKSPACE/ax-favorite-command-calibration.swift"
+  PERFORM_HITS="$({ LC_ALL=C grep -Ec 'AXUIElementPerformAction' "$FAVORITE_COMMAND_SOURCE" || true; })"
+  SET_HITS="$({ LC_ALL=C grep -Ec 'AXUIElementSetAttributeValue' "$FAVORITE_COMMAND_SOURCE" || true; })"
+  EVENT_HITS="$({ LC_ALL=C grep -Ec 'postToPid' "$FAVORITE_COMMAND_SOURCE" || true; })"
+  FORBIDDEN_COMMAND_HITS="$({ LC_ALL=C grep -Ec 'AXUIElementCopyParameterizedAttributeValue|CGEventPost|\.post\(tap:|CGWindowListCreateImage|screencapture|NSPasteboard|kAXURLAttribute|kAXDocumentAttribute|kAXFilenameAttribute' "$FAVORITE_COMMAND_SOURCE" || true; })"
+  {
+    echo "perform_action_source_hits=$PERFORM_HITS"
+    echo "set_attribute_source_hits=$SET_HITS"
+    echo "post_to_pid_source_hits=$EVENT_HITS"
+    echo "forbidden_command_source_hits=$FORBIDDEN_COMMAND_HITS"
+  } > "$OUT/favorite-command-source-audit.txt"
+  [[ "$PERFORM_HITS" == 1 && "$SET_HITS" == 3 && "$EVENT_HITS" == 2 && "$FORBIDDEN_COMMAND_HITS" == 0 ]]
+  swiftc "$FAVORITE_COMMAND_SOURCE" -o "$RAW/ax-favorite-command-calibration"
 fi
 if [[ "${COV_STAGE:-}" == easel-item-diagnostic ]]; then
   FORBIDDEN_SOURCE_API_HITS="$({ LC_ALL=C grep -Ec 'AXUIElementPerformAction|AXUIElementSetAttributeValue|AXUIElementCopyElementAtPosition|AXUIElementCopyParameterizedAttributeValue|CGEvent(Post|Create|Source|Tap)|postToPid|\.post\(tap:|CGWindowListCreateImage|screencapture|NSPasteboard' "$GITHUB_WORKSPACE/ax-easel-item-diagnostic.swift" || true; })"
@@ -769,6 +784,52 @@ if [[ "${COV_STAGE:-}" == favorite-selector-map ]]; then
     echo "ax_value_reads=0"
     echo "ax_value_writes=0"
   } > "$OUT/favorite-selector-summary.txt"
+fi
+
+if [[ "${COV_STAGE:-}" == favorite-command-calibration ]]; then
+  [[ "$(ps -p "$PID" -o comm= | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')" == "$BIN" ]]
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/process-gate.txt"
+  "$RAW/ax-login-nav" "$PID" "$BIN" > "$OUT/login-navigation.txt"
+  set +e
+  "$RAW/ax-login-a-once" "$PID" "$BIN" > "$OUT/login-a-once.txt"
+  LOGIN_RC=$?
+  unset ARC_EMAIL ARC_PASSWORD
+  set -e
+  echo "login_rc=$LOGIN_RC" > "$OUT/login-result.txt"
+  if (( LOGIN_RC != 0 )); then
+    exit "$LOGIN_RC"
+  fi
+  sleep 60
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/post-login-process-gate.txt"
+  "$RAW/ax-favorite-selector-map" "$PID" "$BIN" > "$OUT/favorite-baseline.tsv"
+  set +e
+  "$RAW/ax-favorite-command-calibration" "$PID" "$BIN" > "$OUT/favorite-command-calibration.tsv"
+  COMMAND_RC=$?
+  set -e
+  echo "favorite_command_calibration_rc=$COMMAND_RC" > "$OUT/favorite-command-result.txt"
+  if (( COMMAND_RC != 0 )); then
+    exit "$COMMAND_RC"
+  fi
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/post-command-process-gate.txt"
+  "$RAW/ax-favorite-selector-map" "$PID" "$BIN" > "$OUT/favorite-restored.tsv"
+  cmp "$OUT/favorite-baseline.tsv" "$OUT/favorite-restored.tsv"
+  CANDIDATE_ROWS="$(awk -F '\t' 'NR>1 && $1!="summary" {n++} END{print n+0}' "$OUT/favorite-command-calibration.tsv")"
+  {
+    echo "login_rc=$LOGIN_RC"
+    echo "favorite_command_calibration_rc=$COMMAND_RC"
+    echo "baseline_restored=true"
+    echo "candidate_rows=$CANDIDATE_ROWS"
+    echo "open_command_bar_presses=1"
+    echo "command_value_sets=2"
+    echo "escape_events=2"
+    echo "candidate_presses=0"
+    echo "tab_actions=0"
+    echo "favorite_actions=0"
+    echo "preview_actions=0"
+    echo "provider_actions=0"
+    echo "easel_actions=0"
+    echo "screenshots=0"
+  } > "$OUT/favorite-command-summary.txt"
 fi
 
 if [[ "${COV_STAGE:-}" == view-easels-map ]]; then
