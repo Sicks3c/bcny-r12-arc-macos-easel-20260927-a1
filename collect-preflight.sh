@@ -116,6 +116,8 @@ swiftc "$GITHUB_WORKSPACE/ax-login-nav.swift" -o "$RAW/ax-login-nav"
 swiftc "$GITHUB_WORKSPACE/ax-login-input-calibration.swift" -o "$RAW/ax-login-input-calibration"
 swiftc "$GITHUB_WORKSPACE/ax-login-a-once.swift" -o "$RAW/ax-login-a-once"
 swiftc "$GITHUB_WORKSPACE/ax-view-easels-once.swift" -o "$RAW/ax-view-easels-once"
+swiftc "$GITHUB_WORKSPACE/ax-create-blank-easel-once.swift" -o "$RAW/ax-create-blank-easel-once"
+swiftc "$GITHUB_WORKSPACE/ax-easel-route-hash.swift" -o "$RAW/ax-easel-route-hash"
 open -na "$ARC_APP"
 sleep 35
 PID_SCAN="$(ps -axo pid=,comm= | awk -v n="$BIN" '
@@ -583,4 +585,93 @@ if [[ "${COV_STAGE:-}" == view-easels-map ]]; then
     echo "onboarding_actions=0"
     echo "sign_out_actions=0"
   } > "$OUT/view-easels-map-summary.txt"
+fi
+
+if [[ "${COV_STAGE:-}" == create-blank-easel-map ]]; then
+  [[ "$(ps -p "$PID" -o comm= | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')" == "$BIN" ]]
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/process-gate.txt"
+  "$RAW/ax-login-nav" "$PID" "$BIN" > "$OUT/login-navigation.txt"
+  "$RAW/ax-map" "$PID" > "$OUT/ax-tree-login-form.tsv"
+  set +e
+  "$RAW/ax-login-a-once" "$PID" "$BIN" > "$OUT/login-a-once.txt"
+  LOGIN_RC=$?
+  unset ARC_EMAIL ARC_PASSWORD
+  set -e
+  echo "login_rc=$LOGIN_RC" > "$OUT/login-result.txt"
+  if (( LOGIN_RC != 0 )); then
+    exit "$LOGIN_RC"
+  fi
+
+  sleep 60
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/signed-in-process-gate.txt"
+  "$RAW/ax-view-easels-once" "$PID" "$BIN" > "$OUT/view-empty-action.txt"
+  sleep 15
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/empty-overlay-process-gate.txt"
+  "$RAW/ax-map" "$PID" > "$OUT/ax-tree-empty-overlay.tsv"
+  EMPTY_ITEM_ROLES="$(awk -F '\t' '$1 ~ /^A\/0\/0(\/|$)/ && ($2=="AXRow" || $2=="AXCell" || $2=="AXList" || $2=="AXOutline" || $2=="AXTable") {n++} END{print n+0}' "$OUT/ax-tree-empty-overlay.tsv")"
+  EMPTY_DELETE_ENABLED="$(awk -F '\t' '$2=="AXMenuItem" && $5=="Delete" && $9=="true" {n++} END{print n+0}' "$OUT/ax-tree-empty-overlay.tsv")"
+  EMPTY_SEARCH="$(awk -F '\t' '$1=="A/0/0/4" && $2=="AXTextField" && $8=="Search Easels…" && $9=="true" && $10=="true" && $11=="AXConfirm,AXShowMenu" {n++} END{print n+0}' "$OUT/ax-tree-empty-overlay.tsv")"
+  [[ "$EMPTY_ITEM_ROLES" == 0 && "$EMPTY_DELETE_ENABLED" == 0 && "$EMPTY_SEARCH" == 1 ]]
+
+  set +e
+  "$RAW/ax-create-blank-easel-once" "$PID" "$BIN" > "$OUT/create-blank-easel-action.txt"
+  CREATE_RC=$?
+  set -e
+  echo "create_blank_rc=$CREATE_RC" > "$OUT/create-blank-result.txt"
+  if (( CREATE_RC != 0 )); then
+    exit "$CREATE_RC"
+  fi
+
+  sleep 20
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/post-create-process-gate.txt"
+  "$RAW/ax-easel-route-hash" "$PID" "$BIN" > "$OUT/easel-route-hash.txt"
+  "$RAW/ax-map" "$PID" | LC_ALL=C sed -E 's#(https://)?arc\.net/e/[A-Za-z0-9_-]{8,128}#[REDACTED_EASEL_ROUTE]#g' > "$OUT/ax-tree-blank-postcreate.tsv"
+
+  "$RAW/ax-view-easels-once" "$PID" "$BIN" > "$OUT/view-postcreate-action.txt"
+  sleep 15
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/post-reopen-process-gate.txt"
+  "$RAW/ax-map" "$PID" | LC_ALL=C sed -E 's#(https://)?arc\.net/e/[A-Za-z0-9_-]{8,128}#[REDACTED_EASEL_ROUTE]#g' > "$OUT/ax-tree-postcreate-library.tsv"
+  POST_WINDOWS="$(awk -F '\t' '$2=="AXWindow" {n++} END{print n+0}' "$OUT/ax-tree-postcreate-library.tsv")"
+  POST_MENU_ROWS="$(awk -F '\t' '$2=="AXMenuItem" {n++} END{print n+0}' "$OUT/ax-tree-postcreate-library.tsv")"
+  POST_ITEM_ROLES="$(awk -F '\t' '$1 ~ /^A\/0\/0(\/|$)/ && ($2=="AXRow" || $2=="AXCell" || $2=="AXList" || $2=="AXOutline" || $2=="AXTable") {n++} END{print n+0}' "$OUT/ax-tree-postcreate-library.tsv")"
+  POST_DELETE_ENABLED="$(awk -F '\t' '$2=="AXMenuItem" && $5=="Delete" && $9=="true" {n++} END{print n+0}' "$OUT/ax-tree-postcreate-library.tsv")"
+  POST_DELETE_ANY="$(awk -F '\t' '$2=="AXMenuItem" && $5=="Delete" {n++} END{print n+0}' "$OUT/ax-tree-postcreate-library.tsv")"
+  POST_SEARCH="$(awk -F '\t' '$2=="AXTextField" && $8=="Search Easels…" && $9=="true" && $10=="true" && $11=="AXConfirm,AXShowMenu" {n++} END{print n+0}' "$OUT/ax-tree-postcreate-library.tsv")"
+  POST_CLOSE="$(awk -F '\t' '$2=="AXMenuItem" && $4=="_NS:451" && $5=="Close Library" && $9=="true" && $11=="AXCancel,AXPick,AXPress" {n++} END{print n+0}' "$OUT/ax-tree-postcreate-library.tsv")"
+  POST_HIDE="$(awk -F '\t' '$2=="AXMenuItem" && $4=="_NS:1516" && $5=="Hide Easels" && $9=="true" && $11=="AXCancel,AXPick,AXPress" {n++} END{print n+0}' "$OUT/ax-tree-postcreate-library.tsv")"
+  {
+    echo "login_rc=$LOGIN_RC"
+    echo "create_blank_rc=$CREATE_RC"
+    echo "precreate_item_structural_roles=$EMPTY_ITEM_ROLES"
+    echo "precreate_enabled_delete_rows=$EMPTY_DELETE_ENABLED"
+    echo "precreate_search_easels_exact_hits=$EMPTY_SEARCH"
+    echo "blank_postcreate_nodes=$(($(wc -l < "$OUT/ax-tree-blank-postcreate.tsv")-1))"
+    echo "postcreate_library_nodes=$(($(wc -l < "$OUT/ax-tree-postcreate-library.tsv")-1))"
+    echo "postcreate_window_rows=$POST_WINDOWS"
+    echo "postcreate_menu_rows=$POST_MENU_ROWS"
+    echo "postcreate_item_structural_roles=$POST_ITEM_ROLES"
+    echo "postcreate_enabled_delete_rows=$POST_DELETE_ENABLED"
+    echo "postcreate_any_delete_rows=$POST_DELETE_ANY"
+    echo "postcreate_search_easels_hits=$POST_SEARCH"
+    echo "postcreate_close_library_hits=$POST_CLOSE"
+    echo "postcreate_hide_easels_hits=$POST_HIDE"
+    echo "login_navigation_actions=3"
+    echo "sign_in_press=1"
+    echo "view_easels_presses=2"
+    echo "close_library_press=1"
+    echo "new_easel_press=1"
+    echo "new_easel_retries=0"
+    echo "objects_created_max=1"
+    echo "content_actions=0"
+    echo "marker_actions=0"
+    echo "share_actions=0"
+    echo "context_menu_actions=0"
+    echo "right_clicks=0"
+    echo "delete_actions=0"
+    echo "confirm_actions=0"
+    echo "cancel_actions=0"
+    echo "screenshots=0"
+    echo "raw_url_emitted=0"
+    echo "raw_id_emitted=0"
+  } > "$OUT/create-blank-easel-map-summary.txt"
 fi
