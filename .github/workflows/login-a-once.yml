@@ -1,4 +1,4 @@
-name: cov065-favorite-command-selection
+name: cov065-favorite-command-selection-down
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - name: Map Favorite command selection
+      - name: Calibrate exact Favorite command selection
         shell: bash
         env:
           COV_STAGE: favorite-command-calibration
@@ -23,7 +23,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cov065-favorite-command-selection
+          name: cov065-favorite-command-selection-down
           path: ${{ runner.temp }}/evidence
           if-no-files-found: error
           retention-days: 1

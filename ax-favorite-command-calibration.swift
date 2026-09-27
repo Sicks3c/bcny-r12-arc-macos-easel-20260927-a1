@@ -57,6 +57,14 @@ func sendEscape(to pid: pid_t) -> Bool {
     return true
 }
 
+func sendDown(to pid: pid_t) -> Bool {
+    guard let down = CGEvent(keyboardEventSource: nil, virtualKey: 125, keyDown: true),
+          let up = CGEvent(keyboardEventSource: nil, virtualKey: 125, keyDown: false) else { return false }
+    down.postToPid(pid)
+    up.postToPid(pid)
+    return true
+}
+
 func typeUnicode(_ text: String, to pid: pid_t) -> Bool {
     for unit in text.utf16 {
         var scalar = unit
@@ -126,6 +134,8 @@ var fields = current.filter { _, element in
 guard fields.count == 1 else { exit(74) }
 guard typeUnicode(query, to: pid) else { exit(75) }
 Thread.sleep(forTimeInterval: 4.0)
+guard sendDown(to: pid) else { exit(81) }
+Thread.sleep(forTimeInterval: 1.0)
 
 current = allNodes(AXUIElementCreateApplication(pid))
 let suggestionTables = current.filter { _, element in
@@ -177,4 +187,4 @@ Thread.sleep(forTimeInterval: 2.0)
 let finalNodes = allNodes(AXUIElementCreateApplication(pid))
 guard finalNodes.filter({ _, element in stringAttr(element, kAXIdentifierAttribute as CFString) == "commandBarTextField" }).isEmpty else { exit(78) }
 cleanupComplete = true
-print("summary\tquery=Move_to_Top_Apps\tfilter=unique_commandbar_suggestions_subtree\tscoped_value_nodes=\(candidates.count)\tnonempty_scoped_values=\(nonemptyScopedValues)\tselected_rows=\(selectedRows.count)\tselected_exact_move_rows=\(selectedExactMoveRows)\topen_command_press=1\tunicode_events=32\tvalue_sets=1\tescape_events=2\tcandidate_rows=\(candidates.count)\tcandidate_presses=0\tfavorite_actions=0\tpreview_actions=0\tprovider_actions=0\teasel_actions=0")
+print("summary\tquery=Move_to_Top_Apps\tfilter=unique_commandbar_suggestions_subtree\tscoped_value_nodes=\(candidates.count)\tnonempty_scoped_values=\(nonemptyScopedValues)\tselected_rows=\(selectedRows.count)\tselected_exact_move_rows=\(selectedExactMoveRows)\topen_command_press=1\tunicode_events=32\tselection_down_events=2\tvalue_sets=1\tescape_events=2\tcandidate_rows=\(candidates.count)\tcandidate_presses=0\tfavorite_actions=0\tpreview_actions=0\tprovider_actions=0\teasel_actions=0")
