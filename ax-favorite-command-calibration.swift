@@ -57,6 +57,20 @@ func sendEscape(to pid: pid_t) -> Bool {
     return true
 }
 
+func typeUnicode(_ text: String, to pid: pid_t) -> Bool {
+    for unit in text.utf16 {
+        var scalar = unit
+        guard let down = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true),
+              let up = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: false) else { return false }
+        down.keyboardSetUnicodeString(stringLength: 1, unicodeString: &scalar)
+        up.keyboardSetUnicodeString(stringLength: 1, unicodeString: &scalar)
+        down.postToPid(pid)
+        up.postToPid(pid)
+        Thread.sleep(forTimeInterval: 0.025)
+    }
+    return true
+}
+
 func clean(_ value: String) -> String {
     return value.replacingOccurrences(of: "\t", with: " ")
         .replacingOccurrences(of: "\r", with: " ")
@@ -110,7 +124,7 @@ var fields = current.filter { _, element in
         && isSettable(element, kAXValueAttribute as CFString)
 }
 guard fields.count == 1 else { exit(74) }
-guard AXUIElementSetAttributeValue(fields[0].1, kAXValueAttribute as CFString, query as CFTypeRef) == .success else { exit(75) }
+guard typeUnicode(query, to: pid) else { exit(75) }
 Thread.sleep(forTimeInterval: 4.0)
 
 current = allNodes(AXUIElementCreateApplication(pid))
@@ -153,4 +167,4 @@ Thread.sleep(forTimeInterval: 2.0)
 let finalNodes = allNodes(AXUIElementCreateApplication(pid))
 guard finalNodes.filter({ _, element in stringAttr(element, kAXIdentifierAttribute as CFString) == "commandBarTextField" }).isEmpty else { exit(78) }
 cleanupComplete = true
-print("summary\tquery=Move_to_Top_Apps\topen_command_press=1\tvalue_sets=2\tescape_events=2\tcandidate_rows=\(candidates.count)\tcandidate_presses=0\tfavorite_actions=0\tpreview_actions=0\tprovider_actions=0\teasel_actions=0")
+print("summary\tquery=Move_to_Top_Apps\topen_command_press=1\tunicode_events=32\tvalue_sets=1\tescape_events=2\tcandidate_rows=\(candidates.count)\tcandidate_presses=0\tfavorite_actions=0\tpreview_actions=0\tprovider_actions=0\teasel_actions=0")

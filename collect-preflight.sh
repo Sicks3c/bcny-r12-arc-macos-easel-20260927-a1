@@ -138,7 +138,7 @@ if [[ "${COV_STAGE:-}" == favorite-command-calibration ]]; then
     echo "post_to_pid_source_hits=$EVENT_HITS"
     echo "forbidden_command_source_hits=$FORBIDDEN_COMMAND_HITS"
   } > "$OUT/favorite-command-source-audit.txt"
-  [[ "$PERFORM_HITS" == 1 && "$SET_HITS" == 3 && "$EVENT_HITS" == 2 && "$FORBIDDEN_COMMAND_HITS" == 0 ]]
+  [[ "$PERFORM_HITS" == 1 && "$SET_HITS" == 2 && "$EVENT_HITS" == 4 && "$FORBIDDEN_COMMAND_HITS" == 0 ]]
   swiftc "$FAVORITE_COMMAND_SOURCE" -o "$RAW/ax-favorite-command-calibration"
 fi
 if [[ "${COV_STAGE:-}" == easel-item-diagnostic ]]; then
@@ -820,7 +820,8 @@ if [[ "${COV_STAGE:-}" == favorite-command-calibration ]]; then
     echo "baseline_restored=true"
     echo "candidate_rows=$CANDIDATE_ROWS"
     echo "open_command_bar_presses=1"
-    echo "command_value_sets=2"
+    echo "command_unicode_events=32"
+    echo "command_value_sets=1"
     echo "escape_events=2"
     echo "candidate_presses=0"
     echo "tab_actions=0"
