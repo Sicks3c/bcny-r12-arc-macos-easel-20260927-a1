@@ -208,7 +208,9 @@ if [[ "${COV_STAGE:-}" == signup-a-keyboard ]]; then
   unset ARC_NAME ARC_EMAIL ARC_PASSWORD
   set -e
   echo "input_rc=$INPUT_RC" > "$OUT/input-result.txt"
-  [[ "$INPUT_RC" == 0 ]]
+  if (( INPUT_RC != 0 )); then
+    exit "$INPUT_RC"
+  fi
   sleep 45
   "$RAW/ax-map" "$PID" > "$OUT/ax-tree-post-signup.tsv"
   {

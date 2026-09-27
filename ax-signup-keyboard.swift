@@ -131,13 +131,17 @@ for field in fields {
           initial.isEmpty else { failClosed(108) }
 }
 
-for (field, expected) in [(nameField, name), (emailField, email), (passwordField, password), (confirmField, password)] {
+for (index, input) in [(nameField, name), (emailField, email), (passwordField, password), (confirmField, password)].enumerated() {
+    let (field, expected) = input
     guard AXUIElementSetAttributeValue(field, kAXFocusedAttribute as CFString, kCFBooleanTrue) == .success,
           boolAttr(field, kAXFocusedAttribute as CFString) == true else { failClosed(103) }
     guard typeUnicode(expected, to: pid) else { failClosed(104) }
     guard let actual = copied(field, kAXValueAttribute as CFString) as? String,
           actual.utf16.count == expected.utf16.count,
-          digest(actual) == digest(expected) else { failClosed(105) }
+          digest(actual) == digest(expected) else {
+        fputs("verification_failure_field_index=\(index)\n", stderr)
+        failClosed(105)
+    }
 }
 unsetenv("ARC_NAME")
 unsetenv("ARC_EMAIL")
