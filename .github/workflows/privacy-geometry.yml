@@ -1,0 +1,27 @@
+name: cov039-privacy-geometry
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  map:
+    runs-on: macos-14
+    timeout-minutes: 45
+    env:
+      COV_STAGE: privacy-geometry
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read exact privacy-control geometry
+        shell: bash
+        run: bash ./collect-preflight.sh
+      - name: Upload no-secret geometry evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cov039-privacy-geometry
+          path: ${{ runner.temp }}/evidence
+          if-no-files-found: error
+          retention-days: 1

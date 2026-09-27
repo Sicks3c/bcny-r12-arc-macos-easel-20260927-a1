@@ -108,6 +108,7 @@ swiftc "$GITHUB_WORKSPACE/ax-capability.swift" -o "$RAW/ax-capability"
 swiftc "$GITHUB_WORKSPACE/ax-process-gate.swift" -o "$RAW/ax-process-gate"
 swiftc "$GITHUB_WORKSPACE/ax-signup-keyboard.swift" -o "$RAW/ax-signup-keyboard"
 swiftc "$GITHUB_WORKSPACE/ax-signup-secure-opaque.swift" -o "$RAW/ax-signup-secure-opaque"
+swiftc "$GITHUB_WORKSPACE/ax-geometry.swift" -o "$RAW/ax-geometry"
 open -na "$ARC_APP"
 sleep 35
 PID="$(ps -axo pid=,command= | awk -v n="$ARC_APP/Contents/MacOS/Arc" 'index($0,n){print $1; exit}')"
@@ -259,4 +260,23 @@ if [[ "${COV_STAGE:-}" == signup-a-secure-opaque ]]; then
     echo "object_actions=0"
     echo "share_actions=0"
   } > "$OUT/post-signup-summary.txt"
+fi
+
+if [[ "${COV_STAGE:-}" == privacy-geometry ]]; then
+  "$RAW/ax-step" "$PID" right > "$OUT/action-right.txt"
+  sleep 8
+  "$RAW/ax-map" "$PID" > "$OUT/ax-tree-signup.tsv"
+  [[ "$(ps -p "$PID" -o comm= | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')" == "$BIN" ]]
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/process-gate.txt"
+  "$RAW/ax-geometry" "$PID" > "$OUT/privacy-geometry.txt"
+  {
+    echo "form_navigation_actions=1"
+    echo "privacy_actions=0"
+    echo "keyboard_events=0"
+    echo "screenshots=0"
+    echo "credential_actions=0"
+    echo "account_actions=0"
+    echo "object_actions=0"
+    echo "share_actions=0"
+  } > "$OUT/privacy-geometry-summary.txt"
 fi
