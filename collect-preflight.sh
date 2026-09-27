@@ -114,6 +114,7 @@ swiftc "$GITHUB_WORKSPACE/ax-checkbox-calibration-hid.swift" -o "$RAW/ax-checkbo
 swiftc "$GITHUB_WORKSPACE/ax-create-account.swift" -o "$RAW/ax-create-account"
 swiftc "$GITHUB_WORKSPACE/ax-login-nav.swift" -o "$RAW/ax-login-nav"
 swiftc "$GITHUB_WORKSPACE/ax-login-input-calibration.swift" -o "$RAW/ax-login-input-calibration"
+swiftc "$GITHUB_WORKSPACE/ax-login-a-once.swift" -o "$RAW/ax-login-a-once"
 open -na "$ARC_APP"
 sleep 35
 PID_SCAN="$(ps -axo pid=,comm= | awk -v n="$BIN" '
@@ -468,4 +469,55 @@ if [[ "${COV_STAGE:-}" == login-input-calibration ]]; then
     echo "backend_actions=0"
     echo "credential_values_logged=0"
   } > "$OUT/login-input-calibration-summary.txt"
+fi
+
+if [[ "${COV_STAGE:-}" == login-a-once ]]; then
+  [[ "$(ps -p "$PID" -o comm= | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')" == "$BIN" ]]
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/process-gate.txt"
+  "$RAW/ax-login-nav" "$PID" "$BIN" > "$OUT/login-navigation.txt"
+  "$RAW/ax-map" "$PID" > "$OUT/ax-tree-login-form.tsv"
+  set +e
+  "$RAW/ax-login-a-once" "$PID" "$BIN" > "$OUT/login-a-once.txt"
+  LOGIN_RC=$?
+  unset ARC_EMAIL ARC_PASSWORD
+  set -e
+  echo "login_rc=$LOGIN_RC" > "$OUT/login-result.txt"
+  if (( LOGIN_RC != 0 )); then
+    exit "$LOGIN_RC"
+  fi
+
+  sleep 60
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/post-login-process-gate.txt"
+  "$RAW/ax-map" "$PID" > "$OUT/ax-tree-post-login.tsv"
+  NEXT_HITS="$(awk -F '\t' '$1=="A/0/0/15" && $2=="AXButton" && $3=="" && $4=="" && $5=="" && $6=="Next" && $9=="true" && $10=="false" && $11=="AXPress" {n++} END{print n+0}' "$OUT/ax-tree-post-login.tsv")"
+  SKIP_HITS="$(awk -F '\t' '$1=="A/0/0/16" && $2=="AXButton" && $3=="" && $4=="" && $5=="" && $6=="Skip for now" && $9=="true" && $10=="false" && $11=="AXPress" {n++} END{print n+0}' "$OUT/ax-tree-post-login.tsv")"
+  SIGNOUT_HITS="$(awk -F '\t' '$1=="A/1/1/0/15" && $2=="AXMenuItem" && $3=="" && $4=="_NS:1753" && $5=="Sign Out" && $6=="" && $9=="true" && $10=="false" && $11=="AXCancel,AXPick,AXPress" {n++} END{print n+0}' "$OUT/ax-tree-post-login.tsv")"
+  LOGIN_FORM_HITS="$(awk -F '\t' '($1=="A/0/0/6" && $2=="AXTextField" && $4=="Email") || ($1=="A/0/0/8" && $2=="AXTextField" && $3=="AXSecureTextField" && $4=="Password") || ($1=="A/0/0/10" && $2=="AXButton" && $6=="Sign in") {n++} END{print n+0}' "$OUT/ax-tree-post-login.tsv")"
+  POST_STATE=unknown_fail_closed
+  if (( NEXT_HITS == 1 && SKIP_HITS == 1 && SIGNOUT_HITS == 1 && LOGIN_FORM_HITS == 0 )); then
+    POST_STATE=known_optional_services
+  fi
+  {
+    echo "login_rc=$LOGIN_RC"
+    echo "post_state=$POST_STATE"
+    echo "next_exact_hits=$NEXT_HITS"
+    echo "skip_exact_hits=$SKIP_HITS"
+    echo "sign_out_exact_hits=$SIGNOUT_HITS"
+    echo "login_form_exact_hits=$LOGIN_FORM_HITS"
+    echo "navigation_actions=3"
+    echo "pid_scoped_unicode_fields=2"
+    echo "email_in_memory_length_hash_checks=1"
+    echo "password_post_input_reads=0"
+    echo "sign_in_press=1"
+    echo "sign_in_retries=0"
+    echo "post_login_ax_actions=0"
+    echo "account_state_actions=1"
+    echo "onboarding_actions=0"
+    echo "screenshots=0"
+    echo "object_actions=0"
+    echo "share_actions=0"
+    echo "other_backend_actions=0"
+    echo "credential_values_logged=0"
+  } > "$OUT/login-a-once-summary.txt"
+  [[ "$POST_STATE" == known_optional_services ]] || exit 88
 fi
