@@ -115,6 +115,7 @@ swiftc "$GITHUB_WORKSPACE/ax-create-account.swift" -o "$RAW/ax-create-account"
 swiftc "$GITHUB_WORKSPACE/ax-login-nav.swift" -o "$RAW/ax-login-nav"
 swiftc "$GITHUB_WORKSPACE/ax-login-input-calibration.swift" -o "$RAW/ax-login-input-calibration"
 swiftc "$GITHUB_WORKSPACE/ax-login-a-once.swift" -o "$RAW/ax-login-a-once"
+swiftc "$GITHUB_WORKSPACE/ax-view-easels-once.swift" -o "$RAW/ax-view-easels-once"
 open -na "$ARC_APP"
 sleep 35
 PID_SCAN="$(ps -axo pid=,comm= | awk -v n="$BIN" '
@@ -520,4 +521,66 @@ if [[ "${COV_STAGE:-}" == login-a-once ]]; then
     echo "credential_values_logged=0"
   } > "$OUT/login-a-once-summary.txt"
   [[ "$POST_STATE" == known_optional_services ]] || exit 88
+fi
+
+if [[ "${COV_STAGE:-}" == view-easels-map ]]; then
+  [[ "$(ps -p "$PID" -o comm= | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')" == "$BIN" ]]
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/process-gate.txt"
+  "$RAW/ax-login-nav" "$PID" "$BIN" > "$OUT/login-navigation.txt"
+  "$RAW/ax-map" "$PID" > "$OUT/ax-tree-login-form.tsv"
+  set +e
+  "$RAW/ax-login-a-once" "$PID" "$BIN" > "$OUT/login-a-once.txt"
+  LOGIN_RC=$?
+  unset ARC_EMAIL ARC_PASSWORD
+  set -e
+  echo "login_rc=$LOGIN_RC" > "$OUT/login-result.txt"
+  if (( LOGIN_RC != 0 )); then
+    exit "$LOGIN_RC"
+  fi
+
+  sleep 60
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/signed-in-process-gate.txt"
+  "$RAW/ax-map" "$PID" > "$OUT/ax-tree-signed-in.tsv"
+  set +e
+  "$RAW/ax-view-easels-once" "$PID" "$BIN" > "$OUT/view-easels-action.txt"
+  VIEW_RC=$?
+  set -e
+  echo "view_easels_rc=$VIEW_RC" > "$OUT/view-easels-result.txt"
+  if (( VIEW_RC != 0 )); then
+    exit "$VIEW_RC"
+  fi
+
+  sleep 15
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/post-view-process-gate.txt"
+  "$RAW/ax-map" "$PID" > "$OUT/ax-tree-view-easels.tsv"
+  WINDOW_ROWS="$(awk -F '\t' '$2=="AXWindow" {n++} END{print n+0}' "$OUT/ax-tree-view-easels.tsv")"
+  MENU_ROWS="$(awk -F '\t' '$2=="AXMenuItem" {n++} END{print n+0}' "$OUT/ax-tree-view-easels.tsv")"
+  NEW_EASEL_HITS="$(awk -F '\t' '$2=="AXMenuItem" && $4=="newEaselMenuItemId" && $5=="New Easel" && $9=="true" && $11=="AXCancel,AXPick,AXPress" {n++} END{print n+0}' "$OUT/ax-tree-view-easels.tsv")"
+  DELETE_ENABLED_HITS="$(awk -F '\t' '$2=="AXMenuItem" && $5=="Delete" && $9=="true" && $11=="AXCancel,AXPick,AXPress" {n++} END{print n+0}' "$OUT/ax-tree-view-easels.tsv")"
+  DELETE_ANY_HITS="$(awk -F '\t' '$2=="AXMenuItem" && $5=="Delete" {n++} END{print n+0}' "$OUT/ax-tree-view-easels.tsv")"
+  {
+    echo "login_rc=$LOGIN_RC"
+    echo "view_easels_rc=$VIEW_RC"
+    echo "post_view_nodes=$(($(wc -l < "$OUT/ax-tree-view-easels.tsv")-1))"
+    echo "post_view_window_rows=$WINDOW_ROWS"
+    echo "post_view_menu_rows=$MENU_ROWS"
+    echo "new_easel_exact_enabled_hits=$NEW_EASEL_HITS"
+    echo "delete_exact_enabled_hits=$DELETE_ENABLED_HITS"
+    echo "delete_exact_any_hits=$DELETE_ANY_HITS"
+    echo "login_navigation_actions=3"
+    echo "sign_in_press=1"
+    echo "view_easels_press=1"
+    echo "retries=0"
+    echo "post_view_ax_actions=0"
+    echo "post_view_map_ax_values_read=0"
+    echo "post_view_map_ax_values_written=0"
+    echo "screenshots=0"
+    echo "context_menu_actions=0"
+    echo "right_clicks=0"
+    echo "delete_actions=0"
+    echo "new_easel_actions=0"
+    echo "share_actions=0"
+    echo "onboarding_actions=0"
+    echo "sign_out_actions=0"
+  } > "$OUT/view-easels-map-summary.txt"
 fi
