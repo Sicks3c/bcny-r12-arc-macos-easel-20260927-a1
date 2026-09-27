@@ -136,7 +136,8 @@ let candidates = current.filter { _, element in
                 stringAttr(element, kAXDescriptionAttribute as CFString),
                 stringAttr(element, kAXHelpAttribute as CFString)]
         .joined(separator: " ").lowercased()
-    return identifier.lowercased().contains("commandbarselectedsuggestion")
+    let loweredIdentifier = identifier.lowercased()
+    return (loweredIdentifier.contains("commandbar") && loweredIdentifier.contains("suggestion"))
         || tokens.contains(where: { text.contains($0) })
 }
 
@@ -167,4 +168,4 @@ Thread.sleep(forTimeInterval: 2.0)
 let finalNodes = allNodes(AXUIElementCreateApplication(pid))
 guard finalNodes.filter({ _, element in stringAttr(element, kAXIdentifierAttribute as CFString) == "commandBarTextField" }).isEmpty else { exit(78) }
 cleanupComplete = true
-print("summary\tquery=Move_to_Top_Apps\topen_command_press=1\tunicode_events=32\tvalue_sets=1\tescape_events=2\tcandidate_rows=\(candidates.count)\tcandidate_presses=0\tfavorite_actions=0\tpreview_actions=0\tprovider_actions=0\teasel_actions=0")
+print("summary\tquery=Move_to_Top_Apps\tfilter=all_commandbar_suggestion_ids\topen_command_press=1\tunicode_events=32\tvalue_sets=1\tescape_events=2\tcandidate_rows=\(candidates.count)\tcandidate_presses=0\tfavorite_actions=0\tpreview_actions=0\tprovider_actions=0\teasel_actions=0")
