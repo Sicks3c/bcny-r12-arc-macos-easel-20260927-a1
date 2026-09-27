@@ -386,3 +386,24 @@ if [[ "${COV_STAGE:-}" == create-account-a ]]; then
     exit 220
   fi
 fi
+
+if [[ "${COV_STAGE:-}" == recovery-signin-map ]]; then
+  [[ "$(ps -p "$PID" -o comm= | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')" == "$BIN" ]]
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/process-gate.txt"
+  "$RAW/ax-step" "$PID" signin > "$OUT/action-signin.txt"
+  sleep 8
+  "$RAW/ax-map" "$PID" > "$OUT/ax-tree-signin.tsv"
+  {
+    echo "signin_form_nodes=$(($(wc -l < "$OUT/ax-tree-signin.tsv")-1))"
+    echo "email_identifier_hits=$(awk -F '\t' '$4==\"Email\"{n++} END{print n+0}' "$OUT/ax-tree-signin.tsv")"
+    echo "password_identifier_hits=$(awk -F '\t' '$4==\"Password\"{n++} END{print n+0}' "$OUT/ax-tree-signin.tsv")"
+    echo "signin_description_hits=$(awk -F '\t' '$6==\"Sign in\" || $6==\"Sign In\"{n++} END{print n+0}' "$OUT/ax-tree-signin.tsv")"
+    echo "ax_values_read=0"
+    echo "ax_values_written=0"
+    echo "keyboard_events=0"
+    echo "screenshots=0"
+    echo "account_state_actions=0"
+    echo "object_actions=0"
+    echo "share_actions=0"
+  } > "$OUT/recovery-signin-map-summary.txt"
+fi
