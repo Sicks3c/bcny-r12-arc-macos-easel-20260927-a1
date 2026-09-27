@@ -104,6 +104,7 @@ grep -Fq 'EaselClient.deleteEasel' "$OUT/static-cleanup-contracts.txt"
 swiftc "$GITHUB_WORKSPACE/ax-map.swift" -o "$RAW/ax-map"
 swiftc "$GITHUB_WORKSPACE/ax-step.swift" -o "$RAW/ax-step"
 swiftc "$GITHUB_WORKSPACE/ax-signup.swift" -o "$RAW/ax-signup"
+swiftc "$GITHUB_WORKSPACE/ax-capability.swift" -o "$RAW/ax-capability"
 open -na "$ARC_APP"
 sleep 35
 PID="$(ps -axo pid=,command= | awk -v n="$ARC_APP/Contents/MacOS/Arc" 'index($0,n){print $1; exit}')"
@@ -168,4 +169,21 @@ if [[ "${COV_STAGE:-}" == signup-a ]]; then
     echo "object_actions=0"
     echo "share_actions=0"
   } > "$OUT/post-signup-summary.txt"
+fi
+
+if [[ "${COV_STAGE:-}" == privacy-map ]]; then
+  "$RAW/ax-step" "$PID" right > "$OUT/action-right.txt"
+  sleep 8
+  "$RAW/ax-map" "$PID" > "$OUT/ax-tree-signup.tsv"
+  "$RAW/ax-capability" "$PID" '0,0,14' > "$OUT/privacy-capabilities.txt"
+  {
+    echo "ax_values_read=0"
+    echo "ax_values_written=0"
+    echo "ax_actions_performed=1"
+    echo "keyboard_events=0"
+    echo "screenshots=0"
+    echo "account_actions=0"
+    echo "object_actions=0"
+    echo "share_actions=0"
+  } > "$OUT/privacy-map-summary.txt"
 fi

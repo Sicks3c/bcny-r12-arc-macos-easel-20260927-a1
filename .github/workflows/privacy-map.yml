@@ -1,0 +1,28 @@
+name: cov039-privacy-map
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  map:
+    runs-on: macos-14
+    timeout-minutes: 45
+    env:
+      COV_STAGE: privacy-map
+    steps:
+      - uses: actions/checkout@v4
+      - name: Map value-free privacy-control capabilities
+        shell: bash
+        run: bash ./collect-preflight.sh
+      - name: Upload no-secret evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cov039-privacy-map
+          path: ${{ runner.temp }}/evidence
+          if-no-files-found: error
+          retention-days: 1
+
