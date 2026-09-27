@@ -116,8 +116,13 @@ swiftc "$GITHUB_WORKSPACE/ax-login-nav.swift" -o "$RAW/ax-login-nav"
 swiftc "$GITHUB_WORKSPACE/ax-login-input-calibration.swift" -o "$RAW/ax-login-input-calibration"
 open -na "$ARC_APP"
 sleep 35
-PID="$(ps -axo pid=,command= | awk -v n="$ARC_APP/Contents/MacOS/Arc" 'index($0,n){print $1; exit}')"
-test -n "$PID"
+PID_SCAN="$(ps -axo pid=,comm= | awk -v n="$BIN" '
+  { pid=$1; $1=""; sub(/^[[:space:]]+/, ""); if ($0 == n) { matches++; selected=pid } }
+  END { printf "%d\t%s\n", matches+0, selected }
+')"
+IFS=$'\t' read -r PID_COUNT PID <<< "$PID_SCAN"
+[[ "$PID_COUNT" == 1 ]]
+[[ "$PID" =~ ^[0-9]+$ ]]
 "$RAW/ax-map" "$PID" > "$OUT/ax-tree.tsv"
 {
   echo "timestamp=$(now)"
