@@ -1,0 +1,29 @@
+name: cov039-easel-topology-selection-diagnostic
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Diagnose owned Easel topology and selection capability without item action
+        shell: bash
+        env:
+          COV_STAGE: easel-topology-selection-diagnostic
+          ARC_EMAIL: ${{ secrets.ARC_A_EMAIL }}
+          ARC_PASSWORD: ${{ secrets.ARC_A_PASSWORD }}
+        run: bash ./collect-preflight.sh
+      - name: Upload sanitized topology and selection diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cov039-easel-topology-selection-diagnostic
+          path: ${{ runner.temp }}/evidence
+          if-no-files-found: error
+          retention-days: 1

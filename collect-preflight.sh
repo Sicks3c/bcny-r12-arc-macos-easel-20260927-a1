@@ -138,6 +138,28 @@ if [[ "${COV_STAGE:-}" == easel-item-diagnostic ]]; then
   [[ "$FORBIDDEN_SOURCE_API_HITS" == 0 && "$KAXVALUE_ATTRIBUTE_COPY_HITS" == 0 && "$FORBIDDEN_CONTENT_ATTRIBUTE_HITS" == 0 && "$FORBIDDEN_ITEM_LITERAL_HITS" == 0 ]]
   swiftc "$GITHUB_WORKSPACE/ax-easel-item-diagnostic.swift" -o "$RAW/ax-easel-item-diagnostic"
 fi
+if [[ "${COV_STAGE:-}" == easel-topology-selection-diagnostic ]]; then
+  TOPOLOGY_SELECTION_SOURCE="$GITHUB_WORKSPACE/ax-easel-topology-selection-diagnostic.swift"
+  FORBIDDEN_SOURCE_API_HITS="$({ LC_ALL=C grep -Ec 'AXUIElementPerformAction|AXUIElementSetAttributeValue|AXUIElementCopyElementAtPosition|AXUIElementCopyParameterizedAttributeValue|CGEvent(Post|Create|Source|Tap)|postToPid|\.post\(tap:|CGWindowListCreateImage|screencapture|NSPasteboard' "$TOPOLOGY_SELECTION_SOURCE" || true; })"
+  FORBIDDEN_SELECTION_VALUE_COPY_HITS="$({ LC_ALL=C grep -Ec '(copyAttribute|AXUIElementCopyAttributeValue)\([^,]+,[[:space:]]*kAX(Selected|Focused|SelectedChildren|SelectedRows|SelectedColumns|SelectedCells)Attribute' "$TOPOLOGY_SELECTION_SOURCE" || true; })"
+  KAXVALUE_ATTRIBUTE_COPY_HITS="$({ LC_ALL=C grep -Ec 'copyAttribute\([^,]+,[[:space:]]*kAXValueAttribute' "$TOPOLOGY_SELECTION_SOURCE" || true; })"
+  FORBIDDEN_CONTENT_ATTRIBUTE_HITS="$({ LC_ALL=C grep -Ec 'kAXDescriptionAttribute|kAXHelpAttribute|kAXURLAttribute|kAXDocumentAttribute|kAXFilenameAttribute' "$TOPOLOGY_SELECTION_SOURCE" || true; })"
+  FORBIDDEN_ITEM_LITERAL_HITS="$({ LC_ALL=C grep -Eic 'arc\.net/e/|Untitled Easel|Easel Canvas View' "$TOPOLOGY_SELECTION_SOURCE" || true; })"
+  {
+    echo "forbidden_source_api_hits=$FORBIDDEN_SOURCE_API_HITS"
+    echo "forbidden_selection_value_copy_hits=$FORBIDDEN_SELECTION_VALUE_COPY_HITS"
+    echo "kaxvalue_attribute_copy_hits=$KAXVALUE_ATTRIBUTE_COPY_HITS"
+    echo "forbidden_content_attribute_hits=$FORBIDDEN_CONTENT_ATTRIBUTE_HITS"
+    echo "forbidden_item_literal_hits=$FORBIDDEN_ITEM_LITERAL_HITS"
+    if [[ "$FORBIDDEN_SOURCE_API_HITS" == 0 && "$FORBIDDEN_SELECTION_VALUE_COPY_HITS" == 0 && "$KAXVALUE_ATTRIBUTE_COPY_HITS" == 0 && "$FORBIDDEN_CONTENT_ATTRIBUTE_HITS" == 0 && "$FORBIDDEN_ITEM_LITERAL_HITS" == 0 ]]; then
+      echo 'topology_selection_source_audit=PASS'
+    else
+      echo 'topology_selection_source_audit=FAIL'
+    fi
+  } > "$OUT/topology-selection-source-audit.txt"
+  [[ "$FORBIDDEN_SOURCE_API_HITS" == 0 && "$FORBIDDEN_SELECTION_VALUE_COPY_HITS" == 0 && "$KAXVALUE_ATTRIBUTE_COPY_HITS" == 0 && "$FORBIDDEN_CONTENT_ATTRIBUTE_HITS" == 0 && "$FORBIDDEN_ITEM_LITERAL_HITS" == 0 ]]
+  swiftc "$TOPOLOGY_SELECTION_SOURCE" -o "$RAW/ax-easel-topology-selection-diagnostic"
+fi
 open -na "$ARC_APP"
 sleep 35
 PID_SCAN="$(ps -axo pid=,comm= | awk -v n="$BIN" '
@@ -147,7 +169,7 @@ PID_SCAN="$(ps -axo pid=,comm= | awk -v n="$BIN" '
 IFS=$'\t' read -r PID_COUNT PID <<< "$PID_SCAN"
 [[ "$PID_COUNT" == 1 ]]
 [[ "$PID" =~ ^[0-9]+$ ]]
-if [[ "${COV_STAGE:-}" == easel-item-capability-map || "${COV_STAGE:-}" == easel-item-diagnostic ]]; then
+if [[ "${COV_STAGE:-}" == easel-item-capability-map || "${COV_STAGE:-}" == easel-item-diagnostic || "${COV_STAGE:-}" == easel-topology-selection-diagnostic ]]; then
   "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/initial-process-gate.txt"
   {
     echo "timestamp=$(now)"
@@ -176,6 +198,144 @@ else
     echo "account_actions=0"
     echo "object_actions=0"
   } > "$OUT/preflight-summary.txt"
+fi
+
+if [[ "${COV_STAGE:-}" == easel-topology-selection-diagnostic ]]; then
+  [[ "$(ps -p "$PID" -o comm= | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')" == "$BIN" ]]
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/process-gate.txt"
+  "$RAW/ax-login-nav" "$PID" "$BIN" > "$OUT/login-navigation.txt"
+  set +e
+  "$RAW/ax-login-a-once" "$PID" "$BIN" > "$OUT/login-a-once.txt"
+  LOGIN_RC=$?
+  unset ARC_EMAIL ARC_PASSWORD
+  set -e
+  echo "login_rc=$LOGIN_RC" > "$OUT/login-result.txt"
+  if (( LOGIN_RC != 0 )); then
+    exit "$LOGIN_RC"
+  fi
+
+  sleep 60
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/signed-in-process-gate.txt"
+  set +e
+  "$RAW/ax-view-easels-once" "$PID" "$BIN" > "$OUT/view-easels-action.txt"
+  VIEW_RC=$?
+  set -e
+  echo "view_easels_rc=$VIEW_RC" > "$OUT/view-easels-result.txt"
+  if (( VIEW_RC != 0 )); then
+    exit "$VIEW_RC"
+  fi
+
+  sleep 15
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/post-view-process-gate.txt"
+  set +e
+  "$RAW/ax-easel-topology-selection-diagnostic" "$PID" "$BIN" > "$OUT/easel-topology-selection-diagnostic.txt"
+  TOPOLOGY_SELECTION_RC=$?
+  set -e
+  echo "topology_selection_diagnostic_rc=$TOPOLOGY_SELECTION_RC" > "$OUT/topology-selection-diagnostic-result.txt"
+  if (( TOPOLOGY_SELECTION_RC != 0 )); then
+    exit "$TOPOLOGY_SELECTION_RC"
+  fi
+
+  BAD_SCHEMA_LINES="$({ LC_ALL=C grep -Ev '^[a-z0-9_]+=(true|false|PASS|FAIL|SKIPPED|-?[0-9]+)$' "$OUT/easel-topology-selection-diagnostic.txt" || true; } | wc -l | tr -d ' ')"
+  DUPLICATE_KEYS="$(cut -d= -f1 "$OUT/easel-topology-selection-diagnostic.txt" | LC_ALL=C sort | uniq -d | wc -l | tr -d ' ')"
+  {
+    printf '%s\n' \
+      diagnostic_schema declared_no_perform_action_calls declared_no_set_attribute_calls \
+      declared_no_selection_value_reads declared_no_event_post_calls declared_no_hit_test_calls \
+      declared_no_parameterized_value_calls declared_no_screenshot_calls declared_no_pasteboard_calls \
+      easel_item_title_reads easel_item_static_content_reads easel_item_description_reads \
+      easel_item_help_reads easel_web_url_attribute_reads easel_route_reads \
+      known_chrome_title_gates_enabled known_search_placeholder_gate_enabled process_gate
+    for snapshot in snapshot1 snapshot2; do
+      for key in \
+        standard_window_count library_candidate_count grid_count image_count label_count canvas_count \
+        sign_out_count close_library_count hide_easels_count \
+        canvas_path_present canvas_role_exact canvas_subrole_exact canvas_identifier_exact canvas_tuple_exact \
+        window_unique candidate_unique grid_unique image_unique label_unique canvas_unique \
+        window_fixed_equal candidate_fixed_equal grid_fixed_equal image_fixed_equal label_fixed_equal canvas_fixed_equal \
+        core_path_ready uniqueness_ready fixed_identity_ready menu_paths_ready window_main window_focused \
+        sheet_dialog_popover_count secure_login_field_count parent_chain_ready parent_error_count \
+        parent_first_error_rc pid_equality_ready pid_error_count pid_first_error_rc \
+        candidate_descendant_of_canvas fixed_child_error_count fixed_child_first_error_rc depth_ready topology_ready; do
+        echo "${snapshot}_${key}"
+      done
+      for menu in sign_out close_library hide_easels; do
+        for key in path_present role_exact subrole_exact identifier_exact title_exact enabled_exact value_settable_exact actions_exact tuple_exact; do
+          echo "${snapshot}_menu_${menu}_${key}"
+        done
+      done
+      for node in grid image label; do
+        printf '%s\n' \
+          "${snapshot}_${node}_attribute_names_rc" \
+          "${snapshot}_${node}_attribute_names_count" \
+          "${snapshot}_${node}_attribute_names_type_correct"
+        for attribute in selected focused selected_children selected_rows selected_columns selected_cells; do
+          printf '%s\n' \
+            "${snapshot}_${node}_${attribute}_advertised" \
+            "${snapshot}_${node}_${attribute}_settable_rc" \
+            "${snapshot}_${node}_${attribute}_settable"
+        done
+      done
+      echo "${snapshot}_semantic_selection_candidate_count"
+      echo "${snapshot}_focus_candidate_count"
+    done
+    printf '%s\n' snapshot2_process_gate selection_probe_stable selection_capability_ready diagnostic_complete
+  } | LC_ALL=C sort > "$RAW/topology-selection-required-keys.txt"
+  cut -d= -f1 "$OUT/easel-topology-selection-diagnostic.txt" | LC_ALL=C sort > "$RAW/topology-selection-actual-keys.txt"
+  MISSING_KEYS="$(comm -23 "$RAW/topology-selection-required-keys.txt" "$RAW/topology-selection-actual-keys.txt" | wc -l | tr -d ' ')"
+  EXTRA_KEYS="$(comm -13 "$RAW/topology-selection-required-keys.txt" "$RAW/topology-selection-actual-keys.txt" | wc -l | tr -d ' ')"
+  [[ "$BAD_SCHEMA_LINES" == 0 && "$DUPLICATE_KEYS" == 0 && "$MISSING_KEYS" == 0 && "$EXTRA_KEYS" == 0 ]]
+  grep -Fxq 'diagnostic_schema=2' "$OUT/easel-topology-selection-diagnostic.txt"
+  grep -Fxq 'diagnostic_complete=true' "$OUT/easel-topology-selection-diagnostic.txt"
+
+  SELECTION_READY="$(awk -F= '$1=="selection_capability_ready"{print $2}' "$OUT/easel-topology-selection-diagnostic.txt")"
+  [[ "$SELECTION_READY" == true || "$SELECTION_READY" == false ]]
+  [[ -z "${ARC_EMAIL+x}" && -z "${ARC_PASSWORD+x}" ]]
+
+  ROUTE_HITS="$({ LC_ALL=C grep -ERai '(^|[^A-Za-z0-9.-])(https://)?arc\.net/e/[A-Za-z0-9_-]{8,128}([^A-Za-z0-9_-]|$)' "$OUT" || true; } | wc -l | tr -d ' ')"
+  EMAIL_HITS="$({ LC_ALL=C grep -ERai '[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}' "$OUT" || true; } | wc -l | tr -d ' ')"
+  GENERIC_SECRET_HITS="$({ LC_ALL=C grep -ERa -- '-----BEGIN (RSA|EC|OPENSSH|DSA|PGP) PRIVATE KEY-----|github_pat_[A-Za-z0-9_]+|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|Bearer[[:space:]]+[A-Za-z0-9._~+/=-]{16,}|eyJ[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{8,}' "$OUT" || true; } | wc -l | tr -d ' ')"
+  ITEM_CONTENT_HITS="$({ LC_ALL=C grep -ERai 'Untitled Easel|Easel Canvas View' "$OUT" || true; } | wc -l | tr -d ' ')"
+  {
+    echo "exact_arc_easel_route_hits=$ROUTE_HITS"
+    echo "email_pattern_hits=$EMAIL_HITS"
+    echo "generic_secret_pattern_hits=$GENERIC_SECRET_HITS"
+    echo "item_content_pattern_hits=$ITEM_CONTENT_HITS"
+    echo "credential_environment_names_present=0"
+    echo "exact_secret_value_scan=unavailable_encrypted_repository_secrets"
+  } > "$OUT/topology-selection-route-secret-scan.txt"
+  [[ "$ROUTE_HITS" == 0 && "$EMAIL_HITS" == 0 && "$GENERIC_SECRET_HITS" == 0 && "$ITEM_CONTENT_HITS" == 0 ]]
+
+  {
+    echo "login_rc=$LOGIN_RC"
+    echo "view_easels_rc=$VIEW_RC"
+    echo "topology_selection_diagnostic_rc=$TOPOLOGY_SELECTION_RC"
+    echo "diagnostic_complete=1"
+    echo "workflow_success_instrumentation_only=true"
+    echo "selection_capability_ready=$SELECTION_READY"
+    echo "login_navigation_actions=3"
+    echo "sign_in_press=1"
+    echo "view_easels_press=1"
+    echo "view_easels_retries=0"
+    echo "diagnostic_action_invocations=0"
+    echo "selection_value_reads=0"
+    echo "item_value_reads=0"
+    echo "parameterized_value_invocations=0"
+    echo "scroll_to_visible_invocations=0"
+    echo "show_menu_invocations=0"
+    echo "context_menu_actions=0"
+    echo "right_clicks=0"
+    echo "delete_actions=0"
+    echo "new_easel_actions=0"
+    echo "content_actions=0"
+    echo "marker_actions=0"
+    echo "share_actions=0"
+    echo "confirm_actions=0"
+    echo "cancel_actions=0"
+    echo "sign_out_actions=0"
+    echo "screenshots=0"
+    echo "objects_created=0"
+  } > "$OUT/easel-topology-selection-diagnostic-summary.txt"
 fi
 
 if [[ "${COV_STAGE:-}" == next ]]; then
