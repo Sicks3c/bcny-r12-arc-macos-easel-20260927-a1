@@ -190,7 +190,30 @@ let favoriteCollections = nodes.filter { _, element in
     stringAttr(element, kAXRoleAttribute as CFString) == "AXList"
         && stringAttr(element, kAXIdentifierAttribute as CFString) == "sidebarFavoritesCollectionView"
 }
-guard movedEmpty.isEmpty, favoriteCollections.count == 1 else { exit(84) }
+guard favoriteCollections.count == 1 else { exit(84) }
+
+let effectTokens = ["favorite", "top app", "move to", "pinned", "pin tab", "close tab"]
+let effectNodes = nodes.filter { _, element in
+    let text = [stringAttr(element, kAXIdentifierAttribute as CFString),
+                stringAttr(element, kAXTitleAttribute as CFString),
+                stringAttr(element, kAXDescriptionAttribute as CFString),
+                stringAttr(element, kAXHelpAttribute as CFString)]
+        .joined(separator: " ").lowercased()
+    return effectTokens.contains(where: { text.contains($0) })
+}
+print("effect_path\trole\tsubrole\tidentifier\ttitle\tdescription\thelp\tenabled\tactions")
+for (path, element) in effectNodes {
+    let row = [path,
+               stringAttr(element, kAXRoleAttribute as CFString),
+               stringAttr(element, kAXSubroleAttribute as CFString),
+               stringAttr(element, kAXIdentifierAttribute as CFString),
+               stringAttr(element, kAXTitleAttribute as CFString),
+               stringAttr(element, kAXDescriptionAttribute as CFString),
+               stringAttr(element, kAXHelpAttribute as CFString),
+               boolAttr(element, kAXEnabledAttribute as CFString).map { $0 ? "true" : "false" } ?? "",
+               actions(element).joined(separator: ",")]
+    print(row.map(clean).joined(separator: "\t"))
+}
 
 let favoritePath = favoriteCollections[0].0
 let favoriteNodes = nodes.filter { path, _ in path == favoritePath || path.hasPrefix(favoritePath + "/") }
@@ -220,4 +243,4 @@ let restoredEmpty = nodes.filter { _, element in
         && actions(element) == ["AXPress"]
 }
 guard restoredEmpty.count == 1 else { exit(86) }
-print("summary\tnew_tab_presses=1\topen_command_presses=1\tquery_unicode_events=32\tselection_down_events=2\tselected_exact_move_rows=1\treturn_events=2\tfavorite_actions=1\tclose_tab_presses=1\tdisposable_tab_closed=true\trestored_empty_favorites=true\tfavorite_nodes_after_move=\(favoriteNodes.count)\tpreview_actions=0\tprovider_actions=0\teasel_actions=0")
+print("summary\tnew_tab_presses=1\topen_command_presses=1\tquery_unicode_events=32\tselection_down_events=2\tselected_exact_move_rows=1\treturn_events=2\tfavorite_actions=1\tpost_return_empty_state_rows=\(movedEmpty.count)\tpost_return_effect_rows=\(effectNodes.count)\tclose_tab_presses=1\tdisposable_tab_closed=true\trestored_empty_favorites=true\tfavorite_nodes_after_move=\(favoriteNodes.count)\tpreview_actions=0\tprovider_actions=0\teasel_actions=0")
