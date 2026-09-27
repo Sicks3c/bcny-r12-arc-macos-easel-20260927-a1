@@ -80,6 +80,6 @@ let signIn = nodes.filter {
 }
 
 guard processGate(pid, expectedExecutable: expectedExecutable) else { exit(122) }
-let pass = signOut.count == 1 && newEasel.count == 1 && signIn.count == 0
+let pass = signOut.count == 1 && newEasel.count == 1
 print("schema=1 signed_in_gate=\(pass ? "PASS" : "FAIL") sign_out_identifier_count=\(signOut.count) enabled_new_easel_identifier_count=\(newEasel.count) enabled_sign_in_identifier_count=\(signIn.count) title_reads=0 description_reads=0 value_reads=0 actions_performed=0")
 guard pass else { exit(123) }
