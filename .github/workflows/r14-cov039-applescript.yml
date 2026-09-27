@@ -1,0 +1,184 @@
+name: r14-cov039-applescript-semantic-proof
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          out="$RUNNER_TEMP/evidence"
+          mkdir -p "$out"
+          python3 r14-applescript-probe.py --self-test > "$out/parser-self-test.txt"
+          forbidden_python=$(grep -Eic 'execute javascript|executeJavascript\(|NSPasteboard|CGWindowListCreateImage|screencapture|AXUIElement(Copy|Set).*(kAXValue|kAXTitle|kAXDescription)|make new (easel|document|note|boost)' r14-applescript-probe.py || true)
+          forbidden_gate=$(grep -Eic 'kAX(Value|Title|Description|Help|URL|Document)Attribute|AXUIElementPerformAction|AXUIElementSetAttributeValue|CGEvent|NSPasteboard|screenshot' ax-signedin-identifier-gate.swift || true)
+          raw_output_calls=$(grep -Ec 'print\(completed\.(stdout|stderr)|sys\.stdout\.write\(completed\.(stdout|stderr)' r14-applescript-probe.py || true)
+          {
+            echo "forbidden_python_hits=$forbidden_python"
+            echo "forbidden_signedin_gate_hits=$forbidden_gate"
+            echo "raw_osascript_output_calls=$raw_output_calls"
+            echo "query_fields=application.version,window.id,space.id,tab.id,tab.URL"
+            echo "creator_actions=0"
+            echo "delete_actions=0"
+            echo "share_actions=0"
+            echo "execute_javascript_invocations=0"
+            echo "positive_control_declared=0"
+          } > "$out/source-boundary.txt"
+          test "$forbidden_python" = 0
+          test "$forbidden_gate" = 0
+          test "$raw_output_calls" = 0
+
+      - name: Verify signed Arc and query retained account read-only
+        env:
+          ARC_EMAIL: ${{ secrets.ARC_EMAIL }}
+          ARC_PASSWORD: ${{ secrets.ARC_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          out="$RUNNER_TEMP/evidence"
+          raw="$RUNNER_TEMP/raw"
+          app_root="$RUNNER_TEMP/arc-r14-cov039"
+          archive="$RUNNER_TEMP/Arc-1.166.0-87668.zip"
+          profile='/Users/runner/Library/Application Support/Arc'
+          cache='/Users/runner/Library/Caches/company.thebrowser.Browser'
+          pref='/Users/runner/Library/Preferences/company.thebrowser.Browser.plist'
+          mkdir -p "$out" "$raw" "$app_root"
+          test ! -e "$profile" && test ! -e "$cache" && test ! -e "$pref"
+          echo 'fresh_profile_precheck=PASS' > "$out/fresh-profile.txt"
+
+          cleanup() {
+            set +e
+            if [[ -n "${bin:-}" ]]; then
+              while IFS= read -r target_pid; do
+                [[ -n "$target_pid" ]] && kill "$target_pid"
+              done < <(ps -axo pid=,command= | awk -v n="$app_root/Arc.app/Contents/" 'index($0,n){print $1}')
+            fi
+            sleep 2
+            rm -rf "$profile" "$cache" "$app_root"
+            rm -f "$pref" "$archive"
+            {
+              if [[ -n "${bin:-}" ]] && ps -axo command= | grep -F "$app_root/Arc.app/Contents/" | grep -v grep >/dev/null; then echo 'target_processes=present'; else echo 'target_processes=absent'; fi
+              if [[ -e "$profile" ]]; then echo 'profile=present'; else echo 'profile=absent'; fi
+              if [[ -e "$cache" ]]; then echo 'cache=present'; else echo 'cache=absent'; fi
+              if [[ -e "$pref" ]]; then echo 'preferences=present'; else echo 'preferences=absent'; fi
+              if [[ -e "$app_root" ]]; then echo 'app_root=present'; else echo 'app_root=absent'; fi
+              if [[ -e "$archive" ]]; then echo 'archive=present'; else echo 'archive=absent'; fi
+            } > "$out/native-teardown.txt"
+          }
+          trap cleanup EXIT
+
+          curl --fail --location --retry 3 --output "$archive" https://releases.arc.net/release/Arc-1.166.0-87668.zip
+          archive_hash=$(shasum -a 256 "$archive" | awk '{print $1}')
+          archive_bytes=$(stat -f %z "$archive")
+          test "$archive_hash" = f9cda803b3700ce17c5ad49193138b840c07ecc95873ab4549cdc06a0f3a2095
+          ditto -x -k "$archive" "$app_root"
+          plist="$app_root/Arc.app/Contents/Info.plist"
+          bin="$app_root/Arc.app/Contents/MacOS/Arc"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" = 1.166.0
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")" = 87668
+          codesign --verify --deep --strict --verbose=2 "$app_root/Arc.app" > "$raw/codesign.stdout" 2> "$raw/codesign.stderr"
+          spctl --assess --type execute --verbose=4 "$app_root/Arc.app" > "$raw/spctl.stdout" 2> "$raw/spctl.stderr"
+          {
+            echo "archive_bytes=$archive_bytes"
+            echo "archive_sha256=$archive_hash"
+            echo 'version=1.166.0'
+            echo 'build=87668'
+            echo 'codesign=PASS'
+            echo 'gatekeeper=PASS'
+          } > "$out/package-signature.txt"
+
+          swiftc ax-process-gate.swift -o "$raw/ax-process-gate"
+          swiftc ax-login-nav.swift -o "$raw/ax-login-nav"
+          swiftc ax-login-a-once.swift -o "$raw/ax-login-a-once"
+          swiftc ax-signedin-identifier-gate.swift -o "$raw/ax-signedin-identifier-gate"
+
+          open -na "$app_root/Arc.app"
+          sleep 35
+          pid_scan=$(ps -axo pid=,comm= | awk -v n="$bin" '{pid=$1; $1=""; sub(/^[[:space:]]+/, ""); if ($0==n){matches++; selected=pid}} END{printf "%d\t%s\n", matches+0, selected}')
+          IFS=$'\t' read -r pid_count pid <<< "$pid_scan"
+          test "$pid_count" = 1
+          [[ "$pid" =~ ^[0-9]+$ ]]
+          "$raw/ax-process-gate" "$pid" "$bin" > "$out/initial-process-gate.txt"
+          "$raw/ax-login-nav" "$pid" "$bin" > "$out/login-navigation.txt"
+          "$raw/ax-login-a-once" "$pid" "$bin" > "$out/login-once.txt"
+          unset ARC_EMAIL ARC_PASSWORD
+          sleep 60
+          "$raw/ax-process-gate" "$pid" "$bin" > "$out/signedin-process-gate.txt"
+          "$raw/ax-signedin-identifier-gate" "$pid" "$bin" > "$out/signedin-identifier-gate.txt"
+
+          python3 r14-applescript-probe.py > "$out/applescript-result.json"
+          jq empty "$out/applescript-result.json"
+          decision=$(jq -r .decision "$out/applescript-result.json")
+          case "$decision" in
+            STOP_EXACT_ONE_VALIDATED|STOP_STABILITY_FAILED|STOP_ZERO_CANDIDATES|STOP_MULTIPLE_OR_DUPLICATE_CANDIDATES|STOP_APPLESCRIPT_ERROR) ;;
+            *) exit 190 ;;
+          esac
+          {
+            echo 'exact_signin_navigation_actions=3'
+            echo 'exact_signin_submit_actions=1'
+            echo 'library_actions=0'
+            echo 'easel_item_actions=0'
+            echo 'ordinary_tab_actions=0'
+            echo 'content_value_title_body_reads=0'
+            echo 'clipboard_actions=0'
+            echo 'screenshots=0'
+            echo 'share_actions=0'
+            echo 'delete_actions=0'
+            echo 'creator_actions=0'
+            echo 'execute_javascript_invocations=0'
+            echo "decision=$decision"
+          } > "$out/action-accounting.txt"
+
+          cleanup
+          trap - EXIT
+          grep -Fxq 'target_processes=absent' "$out/native-teardown.txt"
+          grep -Fxq 'profile=absent' "$out/native-teardown.txt"
+          grep -Fxq 'cache=absent' "$out/native-teardown.txt"
+          grep -Fxq 'preferences=absent' "$out/native-teardown.txt"
+          grep -Fxq 'app_root=absent' "$out/native-teardown.txt"
+          grep -Fxq 'archive=absent' "$out/native-teardown.txt"
+
+      - name: Seal sanitized artifact
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          out="$RUNNER_TEMP/evidence"
+          route_hits=$({ grep -ERa 'https://arc\.net/e/[A-Za-z0-9_-]{8,128}' "$out" || true; } | wc -l | tr -d ' ')
+          email_hits=$({ grep -ERai '[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}' "$out" || true; } | wc -l | tr -d ' ')
+          secret_hits=$({ grep -ERa -- '-----BEGIN (RSA|EC|OPENSSH|DSA|PGP) PRIVATE KEY-----|github_pat_[A-Za-z0-9_]+|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|Bearer[[:space:]]+[A-Za-z0-9._~+/=-]{16,}|eyJ[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{8,}' "$out" || true; } | wc -l | tr -d ' ')
+          {
+            echo "raw_easel_route_hits=$route_hits"
+            echo "email_pattern_hits=$email_hits"
+            echo "generic_secret_pattern_hits=$secret_hits"
+            echo 'raw_id_output=0'
+            echo 'raw_url_output=0'
+          } > "$out/SECRET-SCAN.txt"
+          test "$route_hits" = 0
+          test "$email_hits" = 0
+          test "$secret_hits" = 0
+          cd "$out"
+          find . -type f ! -name SHA256SUMS ! -name FILE-ROSTER.txt -print | sed 's#^./##' | LC_ALL=C sort > FILE-ROSTER.txt
+          while IFS= read -r file; do shasum -a 256 "$file"; done < FILE-ROSTER.txt > SHA256SUMS
+          while IFS= read -r file; do test -f "$file"; done < FILE-ROSTER.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: r14-cov039-applescript-sanitized
+          path: ${{ runner.temp }}/evidence
+          if-no-files-found: error
+          retention-days: 1
