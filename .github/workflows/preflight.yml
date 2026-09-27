@@ -1,0 +1,26 @@
+name: cov039-preflight
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify current Arc and map value-free selectors
+        shell: bash
+        run: bash ./collect-preflight.sh
+      - name: Upload no-secret evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cov039-preflight
+          path: ${{ runner.temp }}/evidence
+          if-no-files-found: error
+          retention-days: 1
+
