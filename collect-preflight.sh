@@ -119,6 +119,13 @@ swiftc "$GITHUB_WORKSPACE/ax-view-easels-once.swift" -o "$RAW/ax-view-easels-onc
 swiftc "$GITHUB_WORKSPACE/ax-create-blank-easel-once.swift" -o "$RAW/ax-create-blank-easel-once"
 swiftc "$GITHUB_WORKSPACE/ax-easel-route-hash.swift" -o "$RAW/ax-easel-route-hash"
 swiftc "$GITHUB_WORKSPACE/ax-easel-item-capability.swift" -o "$RAW/ax-easel-item-capability"
+if [[ "${COV_STAGE:-}" == favorite-selector-map ]]; then
+  FAVORITE_SOURCE="$GITHUB_WORKSPACE/ax-favorite-selector-map.swift"
+  FORBIDDEN_FAVORITE_SOURCE_HITS="$({ LC_ALL=C grep -Ec 'AXUIElementPerformAction|AXUIElementSetAttributeValue|AXUIElementCopyParameterizedAttributeValue|CGEvent(Post|Create|Source|Tap)|postToPid|\.post\(tap:|CGWindowListCreateImage|screencapture|NSPasteboard|kAXValueAttribute' "$FAVORITE_SOURCE" || true; })"
+  echo "forbidden_favorite_source_hits=$FORBIDDEN_FAVORITE_SOURCE_HITS" > "$OUT/favorite-source-audit.txt"
+  [[ "$FORBIDDEN_FAVORITE_SOURCE_HITS" == 0 ]]
+  swiftc "$FAVORITE_SOURCE" -o "$RAW/ax-favorite-selector-map"
+fi
 if [[ "${COV_STAGE:-}" == easel-item-diagnostic ]]; then
   FORBIDDEN_SOURCE_API_HITS="$({ LC_ALL=C grep -Ec 'AXUIElementPerformAction|AXUIElementSetAttributeValue|AXUIElementCopyElementAtPosition|AXUIElementCopyParameterizedAttributeValue|CGEvent(Post|Create|Source|Tap)|postToPid|\.post\(tap:|CGWindowListCreateImage|screencapture|NSPasteboard' "$GITHUB_WORKSPACE/ax-easel-item-diagnostic.swift" || true; })"
   KAXVALUE_ATTRIBUTE_COPY_HITS="$({ LC_ALL=C grep -Ec 'copyAttribute\([^,]+,[[:space:]]*kAXValueAttribute' "$GITHUB_WORKSPACE/ax-easel-item-diagnostic.swift" || true; })"
@@ -718,6 +725,50 @@ if [[ "${COV_STAGE:-}" == login-a-once ]]; then
     echo "credential_values_logged=0"
   } > "$OUT/login-a-once-summary.txt"
   [[ "$POST_STATE" == known_optional_services ]] || exit 88
+fi
+
+if [[ "${COV_STAGE:-}" == favorite-selector-map ]]; then
+  [[ "$(ps -p "$PID" -o comm= | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')" == "$BIN" ]]
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/process-gate.txt"
+  "$RAW/ax-login-nav" "$PID" "$BIN" > "$OUT/login-navigation.txt"
+  set +e
+  "$RAW/ax-login-a-once" "$PID" "$BIN" > "$OUT/login-a-once.txt"
+  LOGIN_RC=$?
+  unset ARC_EMAIL ARC_PASSWORD
+  set -e
+  echo "login_rc=$LOGIN_RC" > "$OUT/login-result.txt"
+  if (( LOGIN_RC != 0 )); then
+    exit "$LOGIN_RC"
+  fi
+  sleep 60
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/post-login-process-gate.txt"
+  "$RAW/ax-favorite-selector-map" "$PID" "$BIN" > "$OUT/favorite-selector-map-1.tsv"
+  sleep 4
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/post-login-process-gate-2.txt"
+  "$RAW/ax-favorite-selector-map" "$PID" "$BIN" > "$OUT/favorite-selector-map-2.tsv"
+  cmp "$OUT/favorite-selector-map-1.tsv" "$OUT/favorite-selector-map-2.tsv"
+  FAVORITE_ROWS="$(awk -F '\t' 'NR>1 && tolower($0) ~ /favorite|top app/ {n++} END{print n+0}' "$OUT/favorite-selector-map-1.tsv")"
+  PREVIEW_ROWS="$(awk -F '\t' 'NR>1 && tolower($0) ~ /preview|outlook|google calendar/ {n++} END{print n+0}' "$OUT/favorite-selector-map-1.tsv")"
+  MOVE_ROWS="$(awk -F '\t' 'NR>1 && tolower($0) ~ /move to|pin tab|pinned/ {n++} END{print n+0}' "$OUT/favorite-selector-map-1.tsv")"
+  {
+    echo "login_rc=$LOGIN_RC"
+    echo "stable_maps=2"
+    echo "map_byte_equal=true"
+    echo "favorite_or_top_app_rows=$FAVORITE_ROWS"
+    echo "preview_or_provider_rows=$PREVIEW_ROWS"
+    echo "move_or_pin_rows=$MOVE_ROWS"
+    echo "login_navigation_actions=3"
+    echo "sign_in_press=1"
+    echo "post_login_ax_actions=0"
+    echo "tab_actions=0"
+    echo "favorite_actions=0"
+    echo "preview_actions=0"
+    echo "provider_actions=0"
+    echo "easel_actions=0"
+    echo "screenshots=0"
+    echo "ax_value_reads=0"
+    echo "ax_value_writes=0"
+  } > "$OUT/favorite-selector-summary.txt"
 fi
 
 if [[ "${COV_STAGE:-}" == view-easels-map ]]; then

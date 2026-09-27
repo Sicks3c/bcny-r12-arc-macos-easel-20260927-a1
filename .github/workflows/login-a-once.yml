@@ -1,4 +1,4 @@
-name: cov039-login-a-once
+name: cov065-favorite-selector-map
 
 on:
   workflow_dispatch:
@@ -12,18 +12,18 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - name: Sign in once and map the value-free post-login state
+      - name: Sign in once and map Favorite selector metadata
         shell: bash
         env:
-          COV_STAGE: login-a-once
+          COV_STAGE: favorite-selector-map
           ARC_EMAIL: ${{ secrets.ARC_A_EMAIL }}
           ARC_PASSWORD: ${{ secrets.ARC_A_PASSWORD }}
         run: bash ./collect-preflight.sh
-      - name: Upload sanitized one-time sign-in evidence
+      - name: Upload sanitized Favorite selector evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cov039-login-a-once
+          name: cov065-favorite-selector-map
           path: ${{ runner.temp }}/evidence
           if-no-files-found: error
           retention-days: 1
