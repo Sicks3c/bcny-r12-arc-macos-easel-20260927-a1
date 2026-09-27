@@ -113,6 +113,7 @@ swiftc "$GITHUB_WORKSPACE/ax-checkbox-calibration.swift" -o "$RAW/ax-checkbox-ca
 swiftc "$GITHUB_WORKSPACE/ax-checkbox-calibration-hid.swift" -o "$RAW/ax-checkbox-calibration-hid"
 swiftc "$GITHUB_WORKSPACE/ax-create-account.swift" -o "$RAW/ax-create-account"
 swiftc "$GITHUB_WORKSPACE/ax-login-nav.swift" -o "$RAW/ax-login-nav"
+swiftc "$GITHUB_WORKSPACE/ax-login-input-calibration.swift" -o "$RAW/ax-login-input-calibration"
 open -na "$ARC_APP"
 sleep 35
 PID="$(ps -axo pid=,command= | awk -v n="$ARC_APP/Contents/MacOS/Arc" 'index($0,n){print $1; exit}')"
@@ -430,4 +431,36 @@ if [[ "${COV_STAGE:-}" == login-form-map ]]; then
     echo "object_actions=0"
     echo "share_actions=0"
   } > "$OUT/login-form-map-summary.txt"
+fi
+
+if [[ "${COV_STAGE:-}" == login-input-calibration ]]; then
+  [[ "$(ps -p "$PID" -o comm= | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')" == "$BIN" ]]
+  "$RAW/ax-process-gate" "$PID" "$BIN" > "$OUT/process-gate.txt"
+  "$RAW/ax-login-nav" "$PID" "$BIN" > "$OUT/login-navigation.txt"
+  "$RAW/ax-map" "$PID" > "$OUT/ax-tree-login-form.tsv"
+  set +e
+  "$RAW/ax-login-input-calibration" "$PID" "$BIN" > "$OUT/login-input-calibration.txt"
+  CALIBRATION_RC=$?
+  unset ARC_EMAIL ARC_PASSWORD
+  set -e
+  echo "calibration_rc=$CALIBRATION_RC" > "$OUT/calibration-result.txt"
+  if (( CALIBRATION_RC != 0 )); then
+    exit "$CALIBRATION_RC"
+  fi
+  "$RAW/ax-map" "$PID" > "$OUT/ax-tree-post-calibration.tsv"
+  {
+    echo "navigation_actions=3"
+    echo "pid_scoped_unicode_fields=2"
+    echo "email_in_memory_length_hash_checks=1"
+    echo "password_post_input_reads=0"
+    echo "sign_in_state_transitions=2"
+    echo "sign_in_press=0"
+    echo "cleared_fields=2"
+    echo "screenshots=0"
+    echo "account_state_actions=0"
+    echo "object_actions=0"
+    echo "share_actions=0"
+    echo "backend_actions=0"
+    echo "credential_values_logged=0"
+  } > "$OUT/login-input-calibration-summary.txt"
 fi

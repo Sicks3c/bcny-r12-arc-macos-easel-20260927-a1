@@ -1,0 +1,29 @@
+name: cov039-login-input-calibration
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  calibrate:
+    runs-on: macos-14
+    timeout-minutes: 45
+    env:
+      COV_STAGE: login-input-calibration
+      ARC_EMAIL: ${{ secrets.ARC_A_EMAIL }}
+      ARC_PASSWORD: ${{ secrets.ARC_A_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reversibly calibrate owned A login input
+        shell: bash
+        run: bash ./collect-preflight.sh
+      - name: Upload sanitized login input calibration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cov039-login-input-calibration
+          path: ${{ runner.temp }}/evidence
+          if-no-files-found: error
+          retention-days: 1
